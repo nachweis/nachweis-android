@@ -1,0 +1,27 @@
+*.iml
+.gradle/
+.kotlin/
+/local.properties
+.idea/
+.DS_Store
+build/
+**/build/
+captures/
+.externalNativeBuild
+.cxx
+local.properties
+
+# Secrets and local environment
+.env
+.env.*
+*.jks
+*.keystore
+keystore.properties
+
+# Private planning material must not enter the public app repo
+20*.txt
+**/20*.txt
+wiki/
+exports/
+CLAUDE.md
+llm-wiki.md
