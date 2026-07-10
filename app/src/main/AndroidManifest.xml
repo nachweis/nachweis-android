@@ -2,6 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Issuance and presentation reach the issuer/verifier over the network. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- QR scanning of credential offers (B4). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
     <application
         android:name=".NachweisApp"
         android:allowBackup="false"
@@ -16,12 +24,49 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.Nachweis"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- OpenID4VCI credential offers (issuance entry points). -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="openid-credential-offer" />
+                <data android:scheme="haip-vci" />
+            </intent-filter>
+
+            <!-- OpenID4VP presentation requests. Scheme owned now; handling lands with B5. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="openid4vp" />
+                <data android:scheme="eudi-openid4vp" />
+                <data android:scheme="mdoc-openid4vp" />
+                <data android:scheme="haip-vp" />
+            </intent-filter>
+
+            <!-- Our own auth-code redirect target; never the EU reference app's scheme. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="com.quellkern.nachweis"
+                    android:host="authorization" />
             </intent-filter>
         </activity>
     </application>

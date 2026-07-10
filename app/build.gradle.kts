@@ -1,4 +1,14 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+
+// Developer-local issuer override for testing against a local EUDIPLO. Read from
+// local.properties (git-ignored) key `nachweis.localIssuerOverride`; empty by default so
+// committed builds never point anywhere but the canonical hosts. Not a secret (a localhost
+// origin), just machine-specific, so it stays out of the tree.
+val localIssuerOverride: String = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}.getProperty("nachweis.localIssuerOverride", "")
 
 plugins {
     alias(libs.plugins.android.application)
@@ -37,6 +47,11 @@ android {
             buildConfigField("String", "VERIFIER_BASE_URL", "\"https://verifier-sandbox.nachweis.tech\"")
             // Trust anchors bundled in the demo flavor (public demo trust anchor only).
             buildConfigField("String", "TRUST_ANCHORS_RES", "\"demo_trust_anchors\"")
+            // Public OpenID4VCI client id for the demo issuer tenant.
+            buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis-demo\"")
+            // Developer-local issuer override (empty unless set in local.properties). Only the
+            // demo flavor honors it; production never accepts a local override.
+            buildConfigField("String", "LOCAL_ISSUER_OVERRIDE", "\"$localIssuerOverride\"")
         }
         create("production") {
             dimension = "environment"
@@ -47,6 +62,9 @@ android {
             buildConfigField("String", "ISSUER_BASE_URL", "\"https://api.nachweis.tech\"")
             buildConfigField("String", "VERIFIER_BASE_URL", "\"https://verifier.nachweis.tech\"")
             buildConfigField("String", "TRUST_ANCHORS_RES", "\"production_trust_anchors\"")
+            buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis\"")
+            // Production never honors a local override.
+            buildConfigField("String", "LOCAL_ISSUER_OVERRIDE", "\"\"")
         }
     }
 
@@ -80,6 +98,14 @@ dependencies {
     implementation(libs.eudi.wallet.core)
     implementation(libs.kotlinx.coroutines.android)
 
+    // B3/B4 issuance: QR scanning and device authentication.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.androidx.biometric)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -88,6 +114,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockito.core)

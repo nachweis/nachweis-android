@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only: permit cleartext to a local EUDIPLO for development against 10.0.2.2 (the
+  emulator's view of the host loopback) and localhost. Release builds never include this
+  file, so the production posture stays cleartext-forbidden. Note: wallet-core's OpenID4VCI
+  may still require an https issuer identifier independently of this policy, so a fully local
+  http issuance may not complete even with cleartext allowed.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
