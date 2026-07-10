@@ -1,12 +1,19 @@
 [versions]
 agp = "9.2.1"
+# Kotlin: matches AGP 9.2.1's built-in Kotlin toolchain (kotlin-gradle-plugin 2.2.10,
+# verified from the AGP POM). Do NOT add org.jetbrains.kotlin.android and do NOT pin
+# 2.2.21 (that is only wallet-core's own build version; a 2.2.x compiler consumes it).
+# The Compose plugin below is aligned to this same version.
+kotlin = "2.2.10"
+# wallet-core 0.28.1: pinned foundation dependency. Requires the minSdk 26 / JDK 17 floor.
+# Phase 2 only proves it resolves; no wallet-core API usage yet.
+walletCore = "0.28.1"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
 lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
-kotlin = "2.2.10"
 composeBom = "2025.12.00"
 
 [libraries]
@@ -25,6 +32,7 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material3-adaptive-navigation-suite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
+eudi-wallet-core = { group = "eu.europa.ec.eudi", name = "eudi-lib-android-wallet-core", version.ref = "walletCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
