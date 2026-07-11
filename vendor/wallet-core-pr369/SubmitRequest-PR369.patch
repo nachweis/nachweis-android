@@ -1,0 +1,21 @@
+diff --git a/wallet-core/src/main/java/eu/europa/ec/eudi/wallet/issue/openid4vci/SubmitRequest.kt b/wallet-core/src/main/java/eu/europa/ec/eudi/wallet/issue/openid4vci/SubmitRequest.kt
+index e7060f6..8b7f918 100644
+--- a/wallet-core/src/main/java/eu/europa/ec/eudi/wallet/issue/openid4vci/SubmitRequest.kt
++++ b/wallet-core/src/main/java/eu/europa/ec/eudi/wallet/issue/openid4vci/SubmitRequest.kt
+@@ -58,8 +58,14 @@ internal class SubmitRequest(
+         offeredDocument: Offer.OfferedDocument,
+         keyUnlockData: Map<KeyAlias, KeyUnlockData?>? = null,
+     ): ResponseResult<SubmissionOutcome> {
+-        val payload =
+-            IssuanceRequestPayload.ConfigurationBased(offeredDocument.configurationIdentifier)
++        val configId = offeredDocument.configurationIdentifier
++        val payload = authorizedRequest.credentialIdentifiers
++            ?.get(configId)
++            ?.firstOrNull()
++            ?.let { credentialIdentifier ->
++                IssuanceRequestPayload.IdentifierBased(configId, credentialIdentifier)
++            }
++            ?: IssuanceRequestPayload.ConfigurationBased(configId)
+         val signers = unsignedDocument.getPoPSigners().toList()
+ 
+         val (updatedAuthorizedRequest, outcome) = when (config.clientAuthenticationType) {

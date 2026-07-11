@@ -5,9 +5,11 @@ agp = "9.2.1"
 # 2.2.21 (that is only wallet-core's own build version; a 2.2.x compiler consumes it).
 # The Compose plugin below is aligned to this same version.
 kotlin = "2.2.10"
-# wallet-core 0.28.1: pinned foundation dependency. Requires the minSdk 26 / JDK 17 floor.
-# Phase 2 only proves it resolves; no wallet-core API usage yet.
-walletCore = "0.28.1"
+# wallet-core: BRANCH OVERRIDE. This `live-issuance/walletcore-pr369` branch consumes the
+# vendored, PR#369-patched build (0.28.1 + the identifier-based credential-request fix for
+# upstream bug #353) from vendor/maven, which the deployed EUDIPLO needs for live issuance.
+# main stays on the official released "0.28.1". See vendor/wallet-core-pr369/README.md.
+walletCore = "0.28.1-pr369"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
