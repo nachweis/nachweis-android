@@ -9,6 +9,7 @@ import com.quellkern.nachweis.issuance.DocumentStore
 import com.quellkern.nachweis.issuance.IssuanceController
 import com.quellkern.nachweis.issuance.IssuerAllowlist
 import com.quellkern.nachweis.issuance.WalletDocumentStore
+import com.quellkern.nachweis.presentation.BiometricPresentationAuthenticator
 import com.quellkern.nachweis.presentation.DefaultOid4vpGateway
 import com.quellkern.nachweis.presentation.DefaultRegistrationEvaluator
 import com.quellkern.nachweis.presentation.HttpCrlFetcher
@@ -172,7 +173,10 @@ class NachweisApp : Application() {
                 ),
             )
             PresentationController(
-                gateway = DefaultOid4vpGateway(wallet),
+                gateway = DefaultOid4vpGateway(
+                    wallet = wallet,
+                    authenticator = BiometricPresentationAuthenticator { activityRef.get() },
+                ),
                 validator = validator,
                 scope = appScope,
                 registrationEvaluator = registrationEvaluator,

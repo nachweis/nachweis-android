@@ -17,8 +17,18 @@ A presentation deep link (`openid4vp` and the related schemes registered in B3) 
    request lands in `Rejected` with a typed reason **before any consent UI**.
 3. **Consent** — a valid request stops at `AwaitingConsent`, showing the verifier identity, a
    trust verdict banner, and the exact claims requested.
-4. **Disclose** — on the user's allow, `sendResponse` builds the SD-JWT presentation and
-   dispatches it; on decline, `reject` notifies the verifier and nothing is disclosed.
+4. **Disclose** — on the user's allow, `sendResponse` re-resolves the request through
+   wallet-core (`startRemotePresentation`), unlocks the PID signing key with a device-auth
+   prompt (`PresentationAuthenticator`, mirroring issuance's `DocumentRequiresUserAuth`),
+   builds and — for `response_mode=direct_post.jwt` — encrypts the `vp_token`, then dispatches
+   it and **waits for the verifier's answer** before reporting success; on decline, `reject`
+   notifies the verifier and nothing is disclosed.
+
+wallet-core only exposes an OpenID4VP manager when the wallet is **configured for OpenID4VP**
+(`WalletConfigFactory.build` → `configureOpenId4Vp`: the x509 client-id schemes, the
+presentation deep-link schemes, the SD-JWT PID format, and response encryption). Without that
+block `startRemotePresentation` throws `error("Not supported scheme")` and every allow fails
+while validation and consent — which run in our own code — still work.
 
 ## What the validator checks (in `PresentationRequestValidator`)
 
@@ -73,9 +83,16 @@ verdict — including the `"outside this verifier's registration"` label, which 
   binding matched, DCQL diff computed, and the `"outside this verifier's registration"`
   verdict rendered. Status and CRL artifacts are refreshed out of band; consent still makes
   zero network calls.
-- **Not yet exercised live:** the response-sending cycle
-  (`startRemotePresentation → generateResponse → sendResponse`). The verifier's only deployed
-  request over-asks relative to its registration, so the demo flow correctly stops at the
-  warning verdict instead of sharing. The within-registration positive verdict is likewise
-  covered by tests only until the verifier serves an in-scope request. No physical-device /
-  StrongBox run yet (emulator only).
+- **Proven live (2026-07-11, emulator):** the whole response-sending cycle
+  (`startRemotePresentation → generateResponse → sendResponse`) against the deployed verifier
+  (`verifier-sandbox.nachweis.tech`, `response_mode=direct_post.jwt`, `x509_hash` client-id).
+  Tapping **Allow** re-resolves the request, raises the device-auth prompt, encrypts the
+  `vp_token` (JARM), POSTs it to the verifier's `response_uri`, and the verifier **accepts** it;
+  the app shows "Shared" only after that acceptance (`TransferEvent.ResponseSent`), and a
+  verifier rejection surfaces as an error rather than a false success. This required configuring
+  wallet-core for OpenID4VP and wiring presentation-time key-unlock (see step 4); before that,
+  Allow failed with `error("Not supported scheme")`.
+- **Not yet exercised live:** the within-registration *positive* verdict is covered by tests
+  only until the verifier serves an in-scope request (its only deployed request over-asks, so
+  the flagship verdict is the warning banner). No physical-device / StrongBox run yet (emulator
+  only).
