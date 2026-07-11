@@ -40,8 +40,11 @@ their trust is kept separate:
    - `typ = rc-wrp+jwt`;
    - an AdES ECDSA `alg` (ES256/384/512);
    - **JAdES B-B markers**: the signing certificate is included (`x5c`) and a signed claimed
-     signing time (`sigT`) is present. A plain signed JWT lacking these is rejected — a generic
-     JWS check would not prove compliance, so the profile is asserted, not inferred.
+     signing time is present in the protected header — either the JAdES `sigT` header or, in the
+     deployed V1.2.1 profile, a protected `iat` header (the mandated claimed-signing-time component
+     for JAdES B-B signatures created after 2025-07-15). A plain signed JWT lacking both is
+     rejected — a generic JWS check would not prove compliance, so the profile is asserted, not
+     inferred.
    - signature verifies against the `x5c` leaf;
    - the leaf is temporally valid and chains to the **WRPRC-provider** anchor;
    - required policy/profile fields parse (`wrp`/`sub` identity, `iat`, `status.status_list`,
@@ -58,15 +61,17 @@ cases). Step 4 never rejects: it produces a consent-time verdict of `InsideRegis
 
 ## WRP-identifier binding fields (derivation)
 
-The official V1.2.1 PDF is not in the repo and the local schema clone
-(`external/etsi-ts-119-475-wrprc-schemas/`, v1.1.1 + an aspirational draft) is **fixtures, not
-authority** (dev-plan.md compatibility matrix). The binding fields are therefore *derived* from
-the V1.2.1 structure and recorded here (labelled **assumed**, to be reconciled against the PDF
-during fixture work):
+The binding fields were originally *derived* from the V1.2.1 structure (the official PDF is not in
+the repo and the local schema clone `external/etsi-ts-119-475-wrprc-schemas/` is **fixtures, not
+authority**). They are now **reconciled against the deployed sandbox trust bundle**
+(`verifier-sandbox.nachweis.tech/trust/manifest.json`), which was generated per ETSI TS 119 475
+V1.2.1 by the infrastructure lane and declares the binding explicitly
+(`wrpacField: subject.organizationIdentifier (2.5.4.97)`, `wrprcField: sub`):
 
-- **WRPRC side** — the WRP legal identifier in `wrp.id[].identifier` (aspirational) /
-  `sub.id[].identifier` (v1.1.1), e.g. an LEI `LEIXG-743700EB2QF2J1WRO915`. The parser accepts
-  both containers.
+- **WRPRC side** — the WRP legal identifier. The deployed V1.2.1 shape carries it as the `sub`
+  **string** claim directly (e.g. `NTRDE-NACHWEIS-DEMO-0001`). The parser also accepts the object
+  containers `wrp.id[].identifier` / `sub.id[].identifier` (e.g. an LEI
+  `LEIXG-743700EB2QF2J1WRO915`) so an alternately-serialized certificate still reads.
 - **WRPAC side** — the subject **organizationIdentifier** attribute, OID **2.5.4.97**
   (ETSI EN 319 412-1), which encodes the same semantic legal identifier.
 
@@ -78,20 +83,24 @@ interoperable identifier must match (dev-plan.md decision 6).
 
 ## Payload shape tolerance
 
-The WRPRC payload parser reads both the v1.1.1 clone shape (`sub`, `claim[].path` as a dotted
-string, `meta` as a string) and the aspirational/V1.2.1-aligned shape (`wrp`, `claims[].path` as
-an array, `meta.vct_values`). Fixtures use the aspirational shape because it is DCQL-aligned and
-forward-looking; the tolerance means a real V1.2.1 certificate sitting between the two still reads.
+The WRPRC payload parser reads the identity from `sub` as a plain string (the deployed V1.2.1
+shape), or from the `wrp` / `sub` object containers (`id[].identifier`). It reads registered claims
+from `credentials[].claim[].path` as array segments (the deployed shape, joined with `.`) or
+`credentials[].claims[].path`, and the `vct` from `meta.vct_values[0]` or a plain `meta` string.
+The `DeployedWrprcFixtureTest` pins this against the untouched public `wrprc/valid.jwt` fixture, so
+the offline generator and the in-app validator are verified to agree on the real artifact shape.
 
 ## Deliberate boundaries
 
-- **Not a full JAdES validator.** The `x5c` + `sigT` marker check is a pragmatic B-B assertion
-  sufficient to reject a generic JWS, not an ETSI TS 119 182-1 conformance validator. Full JAdES
-  qualifying-property validation is future work.
-- **Fail-closed by default.** Until Workstream A publishes the public WRPRC-provider anchor and the
-  signed status list, both the provider trust store and the WRPRC status cache are empty, so every
-  WRPRC verification fails closed (`RegistrationUnverifiable` / `RegistrationStatusUnavailable`).
-  This is honest, not a silent pass.
+- **Not a full JAdES validator.** The `x5c` + claimed-signing-time (`sigT` / protected `iat`)
+  marker check is a pragmatic B-B assertion sufficient to reject a generic JWS, not an ETSI
+  TS 119 182-1 conformance validator. Full JAdES qualifying-property validation is future work.
+- **Fail-closed status by default.** The demo flavor now bundles the deployed public
+  WRPRC-provider trust anchor (the Nachweis Demo Root CA, shared with the WRPAC chain), so the
+  provider trust store is populated and the x5c chain validates. The **status cache** is still
+  empty until the out-of-band refresh path fetches the published signed status list, so at runtime
+  a valid WRPRC still fails closed on status (`RegistrationStatusUnavailable`) rather than passing
+  silently. The `production` flavor keeps both anchor bundles empty and fails closed entirely.
 - **CWT/CBOR-AdES** is recognised and explicitly rejected. V1.2.1 permits it; this app supports
   only the JWT profile.
 

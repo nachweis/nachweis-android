@@ -3,6 +3,7 @@ package com.quellkern.nachweis.presentation
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -142,8 +143,16 @@ object WrprcExtractor {
         )
     }
 
-    /** Collect WRP identifiers from `wrp.id[]` (aspirational) or `sub.id[]` (v1.1.1). */
+    /**
+     * Collect WRP identifiers. Three accepted shapes so a V1.2.1 fixture reads regardless of the
+     * exact serialization the registrar chose:
+     * - `sub` as a plain string: the WRP legal identifier directly (the deployed V1.2.1 shape,
+     *   whose binding field is `sub` per the sandbox trust manifest);
+     * - `wrp.id[].identifier` (aspirational, DCQL-aligned object container);
+     * - `sub.id[].identifier` (v1.1.1 object container).
+     */
     private fun wrpIdentifiers(payload: JsonObject): List<String> {
+        (payload["sub"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { return listOf(it) }
         val container = (payload["wrp"] as? JsonObject) ?: (payload["sub"] as? JsonObject) ?: return emptyList()
         val ids = container["id"] as? JsonArray ?: return emptyList()
         return ids.mapNotNull { (it as? JsonObject)?.get("identifier")?.jsonPrimitive?.contentOrNull }

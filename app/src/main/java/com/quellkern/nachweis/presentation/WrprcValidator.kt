@@ -55,9 +55,14 @@ class WrprcValidator(
         if (jws.header.algorithm !in supportedAlgs) return WrprcValidation.Invalid(WrprcRejection.NotJAdES)
 
         // (2) JAdES B-B markers: the signing certificate is included (x5c) and a signed claimed
-        // signing time (sigT) is present. A plain signed JWT lacking these is not a WRPRC.
+        // signing time is present in the protected header. A plain signed JWT lacking these is not
+        // a WRPRC. The claimed signing time is carried either as the JAdES `sigT` header or, in the
+        // deployed V1.2.1 profile, as a protected `iat` header (the mandated claimed-signing-time
+        // component for JAdES B-B signatures created after 2025-07-15); either satisfies the marker.
         val chain = parseX5c(jws) ?: return WrprcValidation.Invalid(WrprcRejection.NotJAdES)
-        if (jws.header.getCustomParam("sigT") == null) return WrprcValidation.Invalid(WrprcRejection.NotJAdES)
+        val hasClaimedSigningTime =
+            jws.header.getCustomParam("sigT") != null || jws.header.getCustomParam("iat") != null
+        if (!hasClaimedSigningTime) return WrprcValidation.Invalid(WrprcRejection.NotJAdES)
         val leaf = chain.first()
 
         // (3) The signature must verify against the WRPRC provider leaf.
