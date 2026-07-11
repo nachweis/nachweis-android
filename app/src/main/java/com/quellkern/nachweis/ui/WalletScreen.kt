@@ -1,5 +1,6 @@
 package com.quellkern.nachweis.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -55,28 +56,15 @@ fun WalletScreen(
     onPresentationDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var scanning by remember { mutableStateOf(false) }
-
     Scaffold(modifier = modifier) { padding ->
         val content = Modifier.padding(padding)
         when (walletState) {
             is WalletState.Ready ->
-                if (scanning) {
-                    ScanScreen(
-                        onScanned = { value ->
-                            scanning = false
-                            onScanned(value)
-                        },
-                        onCancel = { scanning = false },
-                        modifier = content,
-                    )
-                } else {
-                    DocumentListScreen(
-                        documents = documents,
-                        onScanClick = { scanning = true },
-                        modifier = content,
-                    )
-                }
+                WalletReadyContent(
+                    documents = documents,
+                    onScanned = onScanned,
+                    modifier = content,
+                )
             else -> WalletStatus(walletState, modifier = content)
         }
     }
@@ -84,10 +72,7 @@ fun WalletScreen(
     IssuanceOverlay(
         state = issuanceState,
         onConfirm = onConfirm,
-        onDecline = {
-            scanning = false
-            onDecline()
-        },
+        onDecline = onDecline,
         onDismissResult = onDismissResult,
     )
 
@@ -97,6 +82,46 @@ fun WalletScreen(
         onDecline = onPresentationDecline,
         onDismiss = onPresentationDismiss,
     )
+}
+
+/**
+ * The ready wallet's body: the credential list, or the QR scanner while the user has it open.
+ * The scanner visibility is local state here, and a [BackHandler] is installed while scanning so
+ * the system Back gesture returns to the credential list instead of falling through to the
+ * activity — which, as the app's single root, would otherwise exit to the launcher (evidence
+ * finding #2). [scanner] is injectable purely so the back-navigation is testable without the
+ * camera; production always uses [ScanScreen].
+ */
+@Composable
+internal fun WalletReadyContent(
+    documents: List<DocumentSummary>,
+    onScanned: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    scanner: @Composable (onScanned: (String) -> Unit, onCancel: () -> Unit, modifier: Modifier) -> Unit =
+        { onScan, onCancel, scanModifier ->
+            ScanScreen(onScanned = onScan, onCancel = onCancel, modifier = scanModifier)
+        },
+) {
+    var scanning by remember { mutableStateOf(false) }
+    // Only intercept Back while the scanner is showing; on the list, Back keeps its default
+    // (leave the app), so this never traps the user on the credential list.
+    BackHandler(enabled = scanning) { scanning = false }
+    if (scanning) {
+        scanner(
+            { value ->
+                scanning = false
+                onScanned(value)
+            },
+            { scanning = false },
+            modifier,
+        )
+    } else {
+        DocumentListScreen(
+            documents = documents,
+            onScanClick = { scanning = true },
+            modifier = modifier,
+        )
+    }
 }
 
 @Composable
