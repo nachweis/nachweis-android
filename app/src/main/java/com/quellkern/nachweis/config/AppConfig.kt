@@ -11,6 +11,7 @@ object AppConfig {
     val issuerBaseUrl: String = BuildConfig.ISSUER_BASE_URL
     val verifierBaseUrl: String = BuildConfig.VERIFIER_BASE_URL
     val trustAnchorsResourceName: String = BuildConfig.TRUST_ANCHORS_RES
+    val wrprcTrustAnchorsResourceName: String = BuildConfig.WRPRC_TRUST_ANCHORS_RES
     val applicationId: String = BuildConfig.APPLICATION_ID
 
     /**

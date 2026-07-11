@@ -55,6 +55,13 @@ data class ValidatedPresentationRequest(
      * absent. Opaque to B5; D1 parses the WRPRC out of it. Never shown to the user.
      */
     val verifierInfo: String?,
+    /**
+     * The WRP identifier(s) carried by the WRPAC's subject organizationIdentifier (OID 2.5.4.97),
+     * extracted by the access-layer validator. D1 binds the WRPRC to the WRPAC by matching one of
+     * these against the WRPRC's WRP identifiers, without re-parsing the certificate. Empty when
+     * the access certificate carries no organizationIdentifier.
+     */
+    val verifierWrpIdentifiers: List<String> = emptyList(),
     /** The registration scope verdict; [RegistrationVerdict.NotEvaluated] until D1 runs. */
     val registrationVerdict: RegistrationVerdict = RegistrationVerdict.NotEvaluated,
 )

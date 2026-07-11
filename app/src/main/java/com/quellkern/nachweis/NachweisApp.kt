@@ -10,10 +10,13 @@ import com.quellkern.nachweis.issuance.IssuanceController
 import com.quellkern.nachweis.issuance.IssuerAllowlist
 import com.quellkern.nachweis.issuance.WalletDocumentStore
 import com.quellkern.nachweis.presentation.CachedStatusSource
+import com.quellkern.nachweis.presentation.CachedWrprcStatusSource
 import com.quellkern.nachweis.presentation.DefaultOid4vpGateway
+import com.quellkern.nachweis.presentation.DefaultRegistrationEvaluator
 import com.quellkern.nachweis.presentation.PresentationController
 import com.quellkern.nachweis.presentation.PresentationRequestValidator
 import com.quellkern.nachweis.presentation.TrustStore
+import com.quellkern.nachweis.presentation.WrprcValidator
 import com.quellkern.nachweis.wallet.DefaultWalletProvider
 import com.quellkern.nachweis.wallet.SecureWalletLogger
 import com.quellkern.nachweis.wallet.WalletController
@@ -84,22 +87,33 @@ class NachweisApp : Application() {
     fun presentationController(wallet: EudiWallet): PresentationController =
         presentation ?: run {
             val validator = PresentationRequestValidator(
-                trustStore = loadTrustStore(),
+                trustStore = loadTrustStore(AppConfig.trustAnchorsResourceName),
                 statusSource = CachedStatusSource(),
+            )
+            // D1: the flagship registration evaluator. The WRPRC provider is a distinct actor,
+            // so its trust anchor is a separate bundle from the WRPAC anchors; the WRPRC status
+            // cache is likewise separate. Both are empty until Workstream A publishes them, so
+            // registration verification fails closed rather than passing silently.
+            val registrationEvaluator = DefaultRegistrationEvaluator(
+                wrprcValidator = WrprcValidator(
+                    providerTrust = loadTrustStore(AppConfig.wrprcTrustAnchorsResourceName),
+                    statusSource = CachedWrprcStatusSource(),
+                ),
             )
             PresentationController(
                 gateway = DefaultOid4vpGateway(wallet),
                 validator = validator,
                 scope = appScope,
+                registrationEvaluator = registrationEvaluator,
             ).also { presentation = it }
         }
 
     /** Document reader for a ready [wallet]. */
     fun documentStore(wallet: EudiWallet): DocumentStore = WalletDocumentStore(wallet)
 
-    /** Load the active flavor's bundled demo trust anchors (public certificates only). */
-    private fun loadTrustStore(): TrustStore {
-        val resId = resources.getIdentifier(AppConfig.trustAnchorsResourceName, "raw", packageName)
+    /** Load a bundled trust-anchor PEM by raw-resource name (public certificates only). */
+    private fun loadTrustStore(resourceName: String): TrustStore {
+        val resId = resources.getIdentifier(resourceName, "raw", packageName)
         if (resId == 0) return TrustStore(emptyList())
         return resources.openRawResource(resId).use { TrustStore(TrustStore.parsePemCertificates(it)) }
     }

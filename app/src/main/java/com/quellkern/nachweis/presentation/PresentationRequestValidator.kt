@@ -127,6 +127,9 @@ class PresentationRequestValidator(
                 requestedClaims = dcql.claims,
                 nonce = nonce,
                 verifierInfo = verifierInfo,
+                // Read-only extraction of the WRPAC's WRP identifier so D1 can bind the WRPRC
+                // to it without re-parsing the certificate. Not part of the access decision.
+                verifierWrpIdentifiers = WrpBinding.wrpacIdentifiers(leaf),
                 registrationVerdict = RegistrationVerdict.NotEvaluated,
             ),
         )

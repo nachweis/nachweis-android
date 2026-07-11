@@ -47,6 +47,9 @@ android {
             buildConfigField("String", "VERIFIER_BASE_URL", "\"https://verifier-sandbox.nachweis.tech\"")
             // Trust anchors bundled in the demo flavor (public demo trust anchor only).
             buildConfigField("String", "TRUST_ANCHORS_RES", "\"demo_trust_anchors\"")
+            // WRPRC-provider trust anchor (public only; the provider key is offline, provisioned
+            // by Workstream A). Empty placeholder until published: registration checks fail closed.
+            buildConfigField("String", "WRPRC_TRUST_ANCHORS_RES", "\"demo_wrprc_trust_anchors\"")
             // Public OpenID4VCI client id for the demo issuer tenant.
             buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis-demo\"")
             // Developer-local issuer override (empty unless set in local.properties). Only the
@@ -62,6 +65,7 @@ android {
             buildConfigField("String", "ISSUER_BASE_URL", "\"https://api.nachweis.tech\"")
             buildConfigField("String", "VERIFIER_BASE_URL", "\"https://verifier.nachweis.tech\"")
             buildConfigField("String", "TRUST_ANCHORS_RES", "\"production_trust_anchors\"")
+            buildConfigField("String", "WRPRC_TRUST_ANCHORS_RES", "\"production_wrprc_trust_anchors\"")
             buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis\"")
             // Production never honors a local override.
             buildConfigField("String", "LOCAL_ISSUER_OVERRIDE", "\"\"")

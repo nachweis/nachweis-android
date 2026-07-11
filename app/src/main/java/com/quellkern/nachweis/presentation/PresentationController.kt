@@ -23,6 +23,7 @@ class PresentationController(
     private val validator: PresentationRequestValidator,
     private val scope: CoroutineScope,
     private val clock: () -> Date = { Date() },
+    private val registrationEvaluator: RegistrationEvaluator = RegistrationEvaluator.NotEvaluating,
 ) {
     private val _state = MutableStateFlow<PresentationState>(PresentationState.Idle)
     val state: StateFlow<PresentationState> = _state.asStateFlow()
@@ -55,8 +56,20 @@ class PresentationController(
             }
             when (val result = validator.validate(signed, clock())) {
                 is PresentationValidation.Valid -> {
-                    pending = result.request
-                    _state.value = PresentationState.AwaitingConsent(result.request)
+                    // D1: evaluate the verifier's registration (WRPRC) before consent. This is
+                    // pure and local — no gateway or network call — so it never leaves the
+                    // consent path reaching out to the verifier or registrar.
+                    when (val outcome = registrationEvaluator.evaluate(result.request)) {
+                        is RegistrationOutcome.Reject -> {
+                            pending = null
+                            _state.value = PresentationState.Rejected(outcome.error)
+                        }
+                        is RegistrationOutcome.Proceed -> {
+                            val request = result.request.copy(registrationVerdict = outcome.verdict)
+                            pending = request
+                            _state.value = PresentationState.AwaitingConsent(request)
+                        }
+                    }
                 }
                 is PresentationValidation.Invalid -> {
                     pending = null

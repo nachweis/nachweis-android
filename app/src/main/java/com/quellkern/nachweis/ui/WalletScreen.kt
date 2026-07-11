@@ -205,9 +205,10 @@ private fun PresentationConsentDialog(
 private fun VerdictBanner(verdict: RegistrationVerdict, verifierIdentity: String) {
     val message = when (verdict) {
         RegistrationVerdict.NotEvaluated -> "Verified sender: $verifierIdentity"
-        RegistrationVerdict.InsideRegistration -> "$verifierIdentity — within its registration"
+        RegistrationVerdict.InsideRegistration -> "$verifierIdentity — within this verifier's registration"
         is RegistrationVerdict.OutsideRegistration ->
-            "$verifierIdentity — outside this verifier's registration"
+            "$verifierIdentity — outside this verifier's registration. " +
+                "Outside its registration: ${verdict.claimsOutside.joinToString(", ")}"
     }
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,

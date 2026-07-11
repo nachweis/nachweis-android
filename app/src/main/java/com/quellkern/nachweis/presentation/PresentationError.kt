@@ -84,6 +84,58 @@ sealed interface PresentationError {
         override val publicMessage = "This request asks for a credential this app can't present."
     }
 
+    /**
+     * The request carries no registration certificate (WRPRC) in `verifier_info`, so the
+     * verifier's registered scope can't be established. Fail-closed: with the flagship enabled,
+     * a request whose registration cannot be evaluated is refused (dev-plan.md D1).
+     */
+    data object RegistrationMissing : PresentationError {
+        override val publicMessage = "This verifier didn't provide a registration, so it can't be checked."
+    }
+
+    /**
+     * The registration certificate uses an unsupported profile — a CWT/CBOR WRPRC, a non-JWT
+     * `typ`, missing JAdES markers, or missing required fields. The JWT `rc-wrp+jwt` / JAdES B-B
+     * profile is asserted, not inferred (dev-plan.md D1).
+     */
+    data object UnsupportedRegistrationProfile : PresentationError {
+        override val publicMessage = "This verifier's registration is in a format this app can't verify."
+    }
+
+    /**
+     * The registration certificate's signature or provider certification path did not verify
+     * against the locally trusted WRPRC-provider anchor.
+     */
+    data object RegistrationUnverifiable : PresentationError {
+        override val publicMessage = "This verifier's registration could not be verified."
+    }
+
+    /** The registration certificate is revoked per the cached signed status list. */
+    data object RegistrationRevoked : PresentationError {
+        override val publicMessage = "This verifier's registration has been revoked."
+    }
+
+    /** The registration certificate is expired or future-dated. */
+    data object RegistrationExpired : PresentationError {
+        override val publicMessage = "This verifier's registration is expired."
+    }
+
+    /**
+     * The registration certificate's status could not be established from local caches.
+     * Fail-closed: absence of required status material is a rejection (dev-plan.md D1).
+     */
+    data object RegistrationStatusUnavailable : PresentationError {
+        override val publicMessage = "This verifier's registration status can't be confirmed right now."
+    }
+
+    /**
+     * The registration certificate does not bind to the request's access certificate: their
+     * WRP identifiers do not match (ETSI TS 119 475 V1.2.1 binds WRPAC and WRPRC by identity).
+     */
+    data object RegistrationBindingMismatch : PresentationError {
+        override val publicMessage = "This verifier's registration doesn't match its access certificate."
+    }
+
     /** Anything not classified above; cause retained for triage, never for display. */
     data class Unexpected(val cause: Throwable) : PresentationError {
         override val publicMessage = "This request could not be processed."
