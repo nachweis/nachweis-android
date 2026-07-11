@@ -2,6 +2,7 @@ package com.quellkern.nachweis.issuance
 
 import android.net.Uri
 import eu.europa.ec.eudi.wallet.EudiWallet
+import eu.europa.ec.eudi.wallet.document.DocumentExtensions.getDefaultCreateDocumentSettings
 import eu.europa.ec.eudi.wallet.issue.openid4vci.IssueEvent
 import eu.europa.ec.eudi.wallet.issue.openid4vci.Offer
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OfferResult
@@ -81,13 +82,21 @@ class DefaultOid4vciGateway(
                         }
                     }
                 }
-                is IssueEvent.DocumentRequiresCreateSettings ->
-                    // The wallet config (WalletConfigFactory.configureDocumentKeyCreation) already
-                    // fixes the key-creation posture, so wallet-core supplies its own settings and
-                    // this event does not fire on our default configuration. If it ever does, we
-                    // refuse rather than mint a key with an unverified security posture; wallet-core
-                    // then emits Failure, which closes the flow.
-                    event.cancel("key-creation settings must come from the wallet configuration")
+                is IssueEvent.DocumentRequiresCreateSettings -> {
+                    // wallet-core requires the app to supply the per-document key-creation
+                    // settings for each offered credential. We derive them from the wallet's
+                    // configured posture (WalletConfigFactory.configureDocumentKeyCreation, i.e.
+                    // WalletSecurityPolicy: user-auth required, no reuse window, StrongBox
+                    // preferred), so the key is minted under the same guarantee everywhere and
+                    // the posture stays centralized rather than duplicated here. If deriving the
+                    // settings fails, we refuse rather than mint a key with an unverified posture.
+                    try {
+                        event.resume(wallet.getDefaultCreateDocumentSettings(event.offeredDocument))
+                    } catch (t: Throwable) {
+                        event.cancel(t.message ?: "could not derive key-creation settings")
+                        trySend(IssuanceProgress.Failed(t))
+                    }
+                }
                 is IssueEvent.DocumentIssued ->
                     trySend(IssuanceProgress.Issued(event.documentId, event.name))
                 is IssueEvent.DocumentFailed ->
@@ -105,8 +114,14 @@ class DefaultOid4vciGateway(
                 else -> Unit
             }
         }
-        manager.issueDocumentByConfigurationIdentifier(
-            configurationIdentifier,
+        // Issue from the offer itself, not from the manager's configured issuer. A
+        // pre-authorized offer carries its own credential-issuer identifier (here the EUDIPLO
+        // tenant path .../issuers/nachweis) and pre-authorized-code grant; issuing by
+        // configuration identifier would instead resolve metadata against the manager's
+        // configured origin and miss the tenant path, so the offer's grant is never used.
+        // resolveOffer already validated the issuer against the allowlist before we get here.
+        manager.issueDocumentByOfferUri(
+            offerUri,
             transactionCode,
             directExecutor,
             listener,
