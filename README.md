@@ -32,10 +32,11 @@ configuration-based credential request, which `openid4vci-kt` then rejects. This
 fix is upstream PR
 [#369](https://github.com/eu-digital-identity-wallet/eudi-lib-android-wallet-core/pull/369).
 
-`main` intentionally stays on the official release rather than shipping a fork. A reproducible
-patched build (for running live issuance today) lives on the `live-issuance/walletcore-pr369` branch,
-opened as PR [#1](https://github.com/nachweis/nachweis-android/pull/1) and kept open until upstream
-releases the fix. Details: [`docs/interop-walletcore.md`](docs/interop-walletcore.md).
+`main` intentionally stays on the official release rather than shipping a fork. For live issuance
+demonstrations, the upstream fix (PR #369) is applied to a local checkout of the official `v0.28.1`
+and consumed through a local Maven repository; that patched build is never committed or published.
+`main` will resume tracking an official release once the fix ships. Details:
+[`docs/interop-walletcore.md`](docs/interop-walletcore.md).
 
 ## Notes
 
