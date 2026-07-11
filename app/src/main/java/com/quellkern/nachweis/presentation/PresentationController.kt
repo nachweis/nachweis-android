@@ -24,6 +24,7 @@ class PresentationController(
     private val scope: CoroutineScope,
     private val clock: () -> Date = { Date() },
     private val registrationEvaluator: RegistrationEvaluator = RegistrationEvaluator.NotEvaluating,
+    private val prepareStatus: suspend () -> Unit = {},
 ) {
     private val _state = MutableStateFlow<PresentationState>(PresentationState.Idle)
     val state: StateFlow<PresentationState> = _state.asStateFlow()
@@ -47,9 +48,19 @@ class PresentationController(
         }
         _state.value = PresentationState.Resolving
         scope.launch {
+            // Kick the out-of-band status refresh (WRPRC status list, WRPAC CRL) concurrently with
+            // the request fetch. This runs in the pre-consent Resolving phase, which is already
+            // network-touching, so it does not violate the D1 rule that *consent* makes zero network
+            // calls. Overlapping it with the fetch keeps added latency near zero in the common case,
+            // while the join below closes the race where evaluation would otherwise read a cold or
+            // just-expired cache as Unknown while a refresh for exactly this request is still in
+            // flight. prepareStatus bounds its own time and never throws (a slow or failed refresh
+            // leaves the cache to fail closed), so it can never block the UI or crash the flow.
+            val statusPrep = scope.launch { runCatching { prepareStatus() } }
             val signed = try {
                 gateway.obtainSignedRequest(requestUri)
             } catch (t: Throwable) {
+                statusPrep.cancel()
                 pending = null
                 _state.value = PresentationState.Rejected(PresentationError.Unreadable)
                 return@launch
@@ -58,7 +69,10 @@ class PresentationController(
                 is PresentationValidation.Valid -> {
                     // D1: evaluate the verifier's registration (WRPRC) before consent. This is
                     // pure and local — no gateway or network call — so it never leaves the
-                    // consent path reaching out to the verifier or registrar.
+                    // consent path reaching out to the verifier or registrar. Wait for the arrival
+                    // refresh first so a fresh signed status list is in cache before the (local,
+                    // network-free) status lookup runs; still fail-closed if it did not land.
+                    statusPrep.join()
                     when (val outcome = registrationEvaluator.evaluate(result.request)) {
                         is RegistrationOutcome.Reject -> {
                             pending = null
@@ -72,6 +86,7 @@ class PresentationController(
                     }
                 }
                 is PresentationValidation.Invalid -> {
+                    statusPrep.cancel()
                     pending = null
                     _state.value = PresentationState.Rejected(result.error)
                 }

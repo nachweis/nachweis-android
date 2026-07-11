@@ -139,13 +139,13 @@ class MainActivity : FragmentActivity() {
         when (action) {
             is DeepLinkAction.CredentialOffer ->
                 if (issuance != null) issuance.offer(action.offerUri) else pendingDeepLink = action
-            is DeepLinkAction.Presentation -> {
-                // Top up the signed WRPRC status cache out of band before consent. Best-effort and
-                // non-blocking: consent still reads only the cache, and an in-flight refresh never
-                // delays the UI (a not-yet-fresh cache simply fails closed).
-                app.refreshRegistrationStatus()
+            is DeepLinkAction.Presentation ->
+                // The presentation controller now triggers and *awaits* the out-of-band status
+                // refresh itself (bounded) in its pre-consent Resolving phase, so the arrival refresh
+                // is ordered before registration evaluation reads the cache. Consent still reads only
+                // the cache and touches no network. When the wallet is not yet ready the request is
+                // stashed and replayed once it is.
                 if (presentation != null) presentation.onRequest(action.requestUri) else pendingDeepLink = action
-            }
             is DeepLinkAction.AuthorizationCallback ->
                 issuance?.onAuthorizationCallback(android.net.Uri.parse(action.uri))
             DeepLinkAction.Unknown -> Unit

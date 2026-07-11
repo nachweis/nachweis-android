@@ -32,7 +32,9 @@ import eu.europa.ec.eudi.wallet.EudiWallet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.ref.WeakReference
 
 /**
@@ -130,6 +132,35 @@ class NachweisApp : Application() {
         }
     }
 
+    /**
+     * Trigger the out-of-band refresh and *await* it, bounded, before returning. Wired into the
+     * presentation controller as its `prepareStatus` hook: it runs in the pre-consent Resolving
+     * phase (already network-touching for the request fetch), overlapping the request fetch, and
+     * closes the cold-cache / stale-TTL race in which registration evaluation would read the status
+     * cache as Unknown while a refresh for this very request was still in flight — the transient
+     * "registration status can't be confirmed" rejection that an immediate retry then cleared.
+     *
+     * The refresh jobs are launched on the long-lived [appScope] and only the *wait* is bounded by
+     * [STATUS_REFRESH_TIMEOUT_MILLIS]: on timeout they keep running (so a later read still benefits)
+     * while evaluation proceeds against whatever is cached. Fail-closed is fully preserved — a
+     * refresh that has not landed leaves the entry Unknown, which the validator rejects. Never
+     * throws (each refresh is wrapped), so a status-provider outage can never crash the flow. This
+     * is not a consent-time network call: consent (AwaitingConsent → confirm) still reads only the
+     * cache and touches no network.
+     */
+    suspend fun awaitRegistrationStatusFresh() {
+        val jobs = buildList {
+            statusRefresher?.takeIf { it.hasWork() }?.let { r ->
+                add(appScope.launch(Dispatchers.IO) { runCatching { r.refresh() } })
+            }
+            wrpacCrlRefresher?.takeIf { it.hasWork() }?.let { r ->
+                add(appScope.launch(Dispatchers.IO) { runCatching { r.refresh() } })
+            }
+        }
+        if (jobs.isEmpty()) return
+        withTimeoutOrNull(STATUS_REFRESH_TIMEOUT_MILLIS) { jobs.joinAll() }
+    }
+
     /** Set (or clear) the foreground activity used to raise device-authentication prompts. */
     fun setForegroundActivity(activity: FragmentActivity?) {
         activityRef = WeakReference(activity)
@@ -180,6 +211,10 @@ class NachweisApp : Application() {
                 validator = validator,
                 scope = appScope,
                 registrationEvaluator = registrationEvaluator,
+                // Await the out-of-band status refresh (bounded) during the pre-consent Resolving
+                // phase so evaluation never reads a cold/stale cache mid-refresh; consent stays
+                // network-free and fail-closed is preserved.
+                prepareStatus = { awaitRegistrationStatusFresh() },
             ).also { presentation = it }
         }
 
@@ -215,5 +250,14 @@ class NachweisApp : Application() {
             if (BuildConfig.LOCAL_ISSUER_OVERRIDE.isNotBlank()) add(BuildConfig.LOCAL_ISSUER_OVERRIDE)
         }
         return IssuerAllowlist(origins)
+    }
+
+    private companion object {
+        /**
+         * Upper bound on how long an arrival triggers-and-awaits the out-of-band status refresh
+         * before proceeding to evaluate against whatever is cached. Bounds the pre-consent wait so a
+         * slow or unreachable status endpoint degrades to fail-closed rejection, never a hung UI.
+         */
+        const val STATUS_REFRESH_TIMEOUT_MILLIS = 4_000L
     }
 }
