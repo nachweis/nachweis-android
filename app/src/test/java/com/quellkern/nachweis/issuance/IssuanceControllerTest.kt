@@ -131,11 +131,4 @@ class IssuanceControllerTest {
         assertTrue(state is IssuanceState.Failed)
         assertEquals(IssuanceError.Network, (state as IssuanceState.Failed).error)
     }
-
-    @Test
-    fun `presentation deep link sets the not-yet-supported state`() = runTest {
-        val controller = IssuanceController(FakeGateway(resolve = { pidOffer() }), allowlist, this)
-        controller.onPresentation()
-        assertEquals(IssuanceState.PresentationNotYetSupported, controller.state.value)
-    }
 }

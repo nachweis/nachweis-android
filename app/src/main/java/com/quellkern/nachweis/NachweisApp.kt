@@ -9,6 +9,11 @@ import com.quellkern.nachweis.issuance.DocumentStore
 import com.quellkern.nachweis.issuance.IssuanceController
 import com.quellkern.nachweis.issuance.IssuerAllowlist
 import com.quellkern.nachweis.issuance.WalletDocumentStore
+import com.quellkern.nachweis.presentation.CachedStatusSource
+import com.quellkern.nachweis.presentation.DefaultOid4vpGateway
+import com.quellkern.nachweis.presentation.PresentationController
+import com.quellkern.nachweis.presentation.PresentationRequestValidator
+import com.quellkern.nachweis.presentation.TrustStore
 import com.quellkern.nachweis.wallet.DefaultWalletProvider
 import com.quellkern.nachweis.wallet.SecureWalletLogger
 import com.quellkern.nachweis.wallet.WalletController
@@ -41,6 +46,7 @@ class NachweisApp : Application() {
     private var activityRef = WeakReference<FragmentActivity>(null)
 
     private var issuance: IssuanceController? = null
+    private var presentation: PresentationController? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -69,8 +75,34 @@ class NachweisApp : Application() {
             IssuanceController(gateway, buildAllowlist(), appScope).also { issuance = it }
         }
 
+    /**
+     * Lazily build (once) the presentation controller for a ready [wallet]. The validator is
+     * wired with the flavor's locally bundled demo trust anchors and a status source seeded
+     * from the cached status list; with no status cache yet published (Workstream A), every
+     * status lookup is Unknown and fails closed — an honest default, not a silent pass.
+     */
+    fun presentationController(wallet: EudiWallet): PresentationController =
+        presentation ?: run {
+            val validator = PresentationRequestValidator(
+                trustStore = loadTrustStore(),
+                statusSource = CachedStatusSource(),
+            )
+            PresentationController(
+                gateway = DefaultOid4vpGateway(wallet),
+                validator = validator,
+                scope = appScope,
+            ).also { presentation = it }
+        }
+
     /** Document reader for a ready [wallet]. */
     fun documentStore(wallet: EudiWallet): DocumentStore = WalletDocumentStore(wallet)
+
+    /** Load the active flavor's bundled demo trust anchors (public certificates only). */
+    private fun loadTrustStore(): TrustStore {
+        val resId = resources.getIdentifier(AppConfig.trustAnchorsResourceName, "raw", packageName)
+        if (resId == 0) return TrustStore(emptyList())
+        return resources.openRawResource(resId).use { TrustStore(TrustStore.parsePemCertificates(it)) }
+    }
 
     // The configured issuer, or the developer-local override when the demo flavor sets one.
     private fun effectiveIssuerUrl(): String =

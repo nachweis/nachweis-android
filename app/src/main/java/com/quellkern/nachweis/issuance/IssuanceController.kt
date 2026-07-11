@@ -33,12 +33,6 @@ class IssuanceController(
         _state.value = IssuanceState.Idle
     }
 
-    /** Note that an OpenID4VP presentation arrived; handled by the B5 slice. */
-    fun onPresentation() {
-        pending = null
-        _state.value = IssuanceState.PresentationNotYetSupported
-    }
-
     /**
      * Resolve [offerUri], evaluate it against policy, and stop at consent when acceptable.
      * Ignored while an issuance is already resolving or issuing.

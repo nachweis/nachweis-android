@@ -11,10 +11,8 @@ The single activity registers three groups of schemes (see `AndroidManifest.xml`
 
 - **Issuance offers:** `openid-credential-offer`, `haip-vci` — routed to the issuance
   controller.
-- **Presentation:** `openid4vp`, `eudi-openid4vp`, `mdoc-openid4vp`, `haip-vp` — the scheme
-  is owned now so the app appears for these requests, but handling lands with the B5
-  presentation slice; until then the UI states plainly that presentation is not yet
-  supported. Nothing is silently dropped.
+- **Presentation:** `openid4vp`, `eudi-openid4vp`, `mdoc-openid4vp`, `haip-vp` — routed to the
+  presentation controller (B5); see [presentation-slice.md](presentation-slice.md).
 - **Auth-code redirect:** `com.quellkern.nachweis://authorization` — our own redirect target,
   never the EU reference app's `eu.europa.ec.euidi`. A wrong redirect scheme would leave an
   auth-code issuance unable to return into the app.

@@ -40,10 +40,4 @@ sealed interface IssuanceState {
 
     /** Issuance failed with a typed, display-safe reason. */
     data class Failed(val error: IssuanceError) : IssuanceState
-
-    /**
-     * A presentation (OpenID4VP) deep link arrived. The scheme is owned, but the handling
-     * lands with the B5 presentation slice; the UI states this plainly rather than failing.
-     */
-    data object PresentationNotYetSupported : IssuanceState
 }

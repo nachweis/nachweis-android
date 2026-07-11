@@ -15,6 +15,8 @@ import com.quellkern.nachweis.deeplink.DeepLinkAction
 import com.quellkern.nachweis.deeplink.DeepLinkIntake
 import com.quellkern.nachweis.issuance.IssuanceController
 import com.quellkern.nachweis.issuance.IssuanceState
+import com.quellkern.nachweis.presentation.PresentationController
+import com.quellkern.nachweis.presentation.PresentationState
 import com.quellkern.nachweis.ui.WalletScreen
 import com.quellkern.nachweis.ui.theme.NachweisTheme
 import com.quellkern.nachweis.wallet.WalletController
@@ -53,7 +55,12 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        route(DeepLinkIntake.classify(intent.data), controllerIfReady())
+        val ready = walletController.state.value as? WalletState.Ready
+        route(
+            DeepLinkIntake.classify(intent.data),
+            ready?.let { app.issuanceController(it.wallet) },
+            ready?.let { app.presentationController(it.wallet) },
+        )
     }
 
     override fun onResume() {
@@ -73,25 +80,31 @@ class MainActivity : FragmentActivity() {
             WalletScreen(
                 walletState = walletState,
                 issuanceState = IssuanceState.Idle,
+                presentationState = PresentationState.Idle,
                 documents = emptyList(),
                 onScanned = {},
                 onConfirm = {},
                 onDecline = {},
                 onDismissResult = {},
+                onPresentationConfirm = {},
+                onPresentationDecline = {},
+                onPresentationDismiss = {},
             )
             return
         }
 
         val controller = remember(ready.wallet) { app.issuanceController(ready.wallet) }
+        val presentation = remember(ready.wallet) { app.presentationController(ready.wallet) }
         val store = remember(ready.wallet) { app.documentStore(ready.wallet) }
         val issuanceState by controller.state.collectAsState()
+        val presentationState by presentation.state.collectAsState()
         var documents by remember { mutableStateOf(store.list()) }
 
         // Replay a deep link that arrived before the wallet was ready, exactly once.
-        LaunchedEffect(controller) {
+        LaunchedEffect(controller, presentation) {
             pendingDeepLink?.let { action ->
                 pendingDeepLink = null
-                route(action, controller)
+                route(action, controller, presentation)
             }
         }
         // Refresh the list whenever a credential is issued.
@@ -102,27 +115,34 @@ class MainActivity : FragmentActivity() {
         WalletScreen(
             walletState = walletState,
             issuanceState = issuanceState,
+            presentationState = presentationState,
             documents = documents,
-            onScanned = { value -> route(DeepLinkIntake.classify(android.net.Uri.parse(value)), controller) },
+            onScanned = { value ->
+                route(DeepLinkIntake.classify(android.net.Uri.parse(value)), controller, presentation)
+            },
             onConfirm = { txCode -> controller.confirm(txCode) },
             onDecline = { controller.reset() },
             onDismissResult = { controller.reset() },
+            onPresentationConfirm = { presentation.confirm() },
+            onPresentationDecline = { presentation.decline() },
+            onPresentationDismiss = { presentation.reset() },
         )
     }
 
-    private fun controllerIfReady(): IssuanceController? =
-        (walletController.state.value as? WalletState.Ready)?.let { app.issuanceController(it.wallet) }
-
-    // Dispatch a classified deep link. Offers and presentations need a ready controller; if
-    // one isn't available yet the offer is stashed and replayed when the wallet becomes ready.
-    private fun route(action: DeepLinkAction, controller: IssuanceController?) {
+    // Dispatch a classified deep link. Offers and presentations need their ready controller;
+    // if the wallet isn't ready the action is stashed and replayed once it is.
+    private fun route(
+        action: DeepLinkAction,
+        issuance: IssuanceController?,
+        presentation: PresentationController?,
+    ) {
         when (action) {
             is DeepLinkAction.CredentialOffer ->
-                if (controller != null) controller.offer(action.offerUri) else pendingDeepLink = action
+                if (issuance != null) issuance.offer(action.offerUri) else pendingDeepLink = action
             is DeepLinkAction.Presentation ->
-                if (controller != null) controller.onPresentation() else pendingDeepLink = action
+                if (presentation != null) presentation.onRequest(action.requestUri) else pendingDeepLink = action
             is DeepLinkAction.AuthorizationCallback ->
-                controller?.onAuthorizationCallback(android.net.Uri.parse(action.uri))
+                issuance?.onAuthorizationCallback(android.net.Uri.parse(action.uri))
             DeepLinkAction.Unknown -> Unit
         }
     }

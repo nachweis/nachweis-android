@@ -106,6 +106,10 @@ dependencies {
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.androidx.biometric)
 
+    // B5 presentation: signed-request (JAR) parsing/verification and JSON handling.
+    implementation(libs.nimbus.jose.jwt)
+    implementation(libs.kotlinx.serialization.json)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -118,6 +122,11 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockito.core)
+    // B5 fixtures only: mint a throwaway WRPAC test CA and signed requests on the JVM.
+    testImplementation(libs.bouncycastle.bcpkix)
+    testImplementation(libs.bouncycastle.bcprov)
+    testImplementation(libs.nimbus.jose.jwt)
+    testImplementation(libs.kotlinx.serialization.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -23,6 +23,14 @@ mockito = "5.14.2"
 camerax = "1.4.2"
 mlkitBarcode = "17.3.0"
 biometric = "1.1.0"
+# B5 presentation slice. Nimbus parses/verifies the signed request (JAR) and its x5c chain;
+# kotlinx-serialization-json reads the request-object and DCQL JSON. Both are already on the
+# wallet-core runtime classpath transitively; pinned here because the validator uses them
+# directly. Versions match the resolved runtime graph (nimbus 10.9, serialization 1.9.x).
+nimbusJose = "10.9"
+kotlinxSerialization = "1.9.0"
+# Test-only fixture minting: BouncyCastle mints the throwaway WRPAC test CA and leaves.
+bouncycastle = "1.78.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -51,6 +59,10 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
+nimbus-jose-jwt = { group = "com.nimbusds", name = "nimbus-jose-jwt", version.ref = "nimbusJose" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+bouncycastle-bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
