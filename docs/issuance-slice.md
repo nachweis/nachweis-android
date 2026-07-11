@@ -63,17 +63,17 @@ It is developer-machine state, never a committed default, and production ignores
 
 The client flow is implemented and its logic is fully tested (JVM unit tests for deep-link
 routing, allowlist, offer evaluation, error mapping, and the controller state machine;
-on-device tests for deep-link resolution). **A live end-to-end issuance was not run**, for two
-independent reasons observed this session:
+on-device tests for deep-link resolution).
 
-1. **No reachable provisioned issuer.** The local EUDIPLO (`localhost:3002`) has no
-   provisioned SD-JWT PID tenant — every `issuers/*` metadata path returns HTTP 500. The
-   `nachweis` tenant is provisioned by the infrastructure lane (netcub
-   `scripts/provision-eudiplo-demo.sh`, run on the VPS), and the public sandbox
-   (`api-sandbox.nachweis.tech`) is not yet deployed.
-2. **Transport.** wallet-core's OpenID4VCI expects an https issuer identifier; a purely local
-   http issuer would not satisfy it even with debug cleartext enabled.
+**Live end-to-end issuance was completed on 2026-07-11** against the deployed sandbox issuer
+(`api-sandbox.nachweis.tech`, EUDIPLO with the provisioned `nachweis` SD-JWT PID tenant): a
+pre-authorized offer resolved through the allowlist and consent, Keystore user authentication
+was exercised, and a real SD-JWT PID (`urn:eudi:pid:de:1`) was issued and stored, appearing
+in the credential list. Run on an emulator (no physical-device/StrongBox run yet).
 
-The end-to-end issuance smoke test (scan → issue → the credential appears in the list) should
-be run once the sandbox issuer is deployed, using a demo build (optionally with the local
-override against a provisioned local EUDIPLO over https).
+One caveat: completing issuance currently requires a locally patched `wallet-core` build
+because of an upstream OpenID4VCI bug ([#353] / [PR #369]); `main` stays on the official
+release and documents this in [`interop-walletcore.md`](interop-walletcore.md).
+
+[#353]: https://github.com/eu-digital-identity-wallet/eudi-lib-android-wallet-core/issues/353
+[PR #369]: https://github.com/eu-digital-identity-wallet/eudi-lib-android-wallet-core/pull/369

@@ -59,19 +59,23 @@ in `ValidatedPresentationRequest.verifierInfo`. The D1 flagship parses the WRPRC
 verifies it (JWT `rc-wrp+jwt`, JAdES B-B), checks the WRP-identifier binding, and replaces the
 verdict — including the `"outside this verifier's registration"` label, which B5 never renders.
 
-## Honest boundary (what is proven vs. what awaits a live verifier)
+## Honest boundary (what is proven vs. what is not)
 
 - **Proven (JVM + emulator):** the full validation matrix (valid / unsigned / bad signature /
   untrusted / expired / revoked / unknown-status / client-id mismatch / DCQL beyond subset),
   the DCQL subset parser, PKIX path building against the demo anchor, and the controller's
   ordering guarantees including zero-network-during-consent. Deep-link schemes resolve on the
   device (`DeepLinkResolutionInstrumentedTest`).
-- **Compile-only, awaiting a live verifier:** `DefaultOid4vpGateway.sendResponse` drives
-  wallet-core's `startRemotePresentation → generateResponse → sendResponse` cycle. It compiles
-  against wallet-core 0.28.1 but is exercised end-to-end only against a deployed augenmass
-  verifier, which does not yet exist (Workstream A). By the time it runs, the request was
-  already validated and the user already consented. Presentation-time key-unlock (mirroring
-  issuance's `DocumentRequiresUserAuth`) is wired when a live verifier is available.
-- **Status cache:** with no status endpoint deployed yet, `CachedStatusSource` is empty, so
-  every WRPAC status is `Unknown` and — correctly — fails closed. Once Workstream A publishes
-  the signed status list, the cache is seeded and valid WRPACs pass.
+- **Proven live (2026-07-11, emulator):** the whole request-validation and verdict pipeline
+  ran against the deployed verifier (`verifier-sandbox.nachweis.tech`): real signed request
+  fetched, WRPAC chain validated with status **Good** via the deployed CRL, the ETSI TS 119 475
+  V1.2.1 WRPRC verified with status **Valid** via the live signed status list, WRP-identifier
+  binding matched, DCQL diff computed, and the `"outside this verifier's registration"`
+  verdict rendered. Status and CRL artifacts are refreshed out of band; consent still makes
+  zero network calls.
+- **Not yet exercised live:** the response-sending cycle
+  (`startRemotePresentation → generateResponse → sendResponse`). The verifier's only deployed
+  request over-asks relative to its registration, so the demo flow correctly stops at the
+  warning verdict instead of sharing. The within-registration positive verdict is likewise
+  covered by tests only until the verifier serves an in-scope request. No physical-device /
+  StrongBox run yet (emulator only).
