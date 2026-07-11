@@ -15,12 +15,12 @@ class WalletConfigFactoryTest {
 
     @Test
     fun build_encodesStoragePathAndSecurePosture() {
-        val dir = File("/data/user/0/com.quellkern.nachweis/no_backup/wallet")
+        val dbFile = File("/data/user/0/com.quellkern.nachweis/no_backup/wallet/wallet-store.db")
         val policy = WalletSecurityPolicy.secure(debuggable = false)
 
-        val config = WalletConfigFactory.build(dir, policy)
+        val config = WalletConfigFactory.build(dbFile, policy)
 
-        assertEquals(dir.absolutePath, config.documentsStoragePath)
+        assertEquals(dbFile.absolutePath, config.documentsStoragePath)
         assertTrue("user authentication must be required", config.userAuthenticationRequired)
         assertEquals(Duration.ZERO, config.userAuthenticationTimeout)
         assertTrue("StrongBox preference must be carried", config.useStrongBoxForKeys)

@@ -16,9 +16,22 @@ object WalletStorage {
     /** Subdirectory name for wallet-core's document store. */
     const val DIR_NAME: String = "wallet"
 
+    /** SQLite database file wallet-core/multipaz opens inside [DIR_NAME]. */
+    const val DB_FILE_NAME: String = "wallet-store.db"
+
     /** The wallet document-store directory, always under noBackupFilesDir. */
     fun documentsDir(context: Context): File =
         File(context.noBackupFilesDir, DIR_NAME).apply { mkdirs() }
+
+    /**
+     * Absolute path of the wallet database file. wallet-core 0.28.1 hands this path straight
+     * to multipaz's [org.multipaz.storage.android.AndroidStorage], which opens it as a SQLite
+     * database *file* — so the configured path must be a file, and its parent directory must
+     * already exist (SQLite does not create parent directories). [documentsDir] creates that
+     * parent; the file itself is left for SQLite to create on first open.
+     */
+    fun databaseFile(context: Context): File =
+        File(documentsDir(context), DB_FILE_NAME)
 
     /**
      * True when [path] is contained in this context's noBackupFilesDir subtree. Used by

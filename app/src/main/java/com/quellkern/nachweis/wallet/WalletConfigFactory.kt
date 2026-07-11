@@ -18,12 +18,14 @@ object WalletConfigFactory {
     const val DOCUMENT_MANAGER_ID: String = "nachweis-documents"
 
     /**
-     * Pure assembly: encode [policy] and the [storageDir] into an [EudiWalletConfig].
-     * No Android context is touched, so this is exercised directly in JVM unit tests.
+     * Pure assembly: encode [policy] and the [storageFile] into an [EudiWalletConfig].
+     * [storageFile] is the SQLite database *file* wallet-core opens (see
+     * [WalletStorage.databaseFile]), not a directory. No Android context is touched, so this
+     * is exercised directly in JVM unit tests.
      */
-    fun build(storageDir: File, policy: WalletSecurityPolicy): EudiWalletConfig =
+    fun build(storageFile: File, policy: WalletSecurityPolicy): EudiWalletConfig =
         EudiWalletConfig()
-            .configureDocumentManager(storageDir.absolutePath, DOCUMENT_MANAGER_ID)
+            .configureDocumentManager(storageFile.absolutePath, DOCUMENT_MANAGER_ID)
             .configureDocumentKeyCreation(
                 userAuthenticationRequired = policy.userAuthenticationRequired,
                 userAuthenticationTimeout = policy.userAuthenticationTimeout,
@@ -38,5 +40,5 @@ object WalletConfigFactory {
      * does not vary by flavor.
      */
     fun create(context: Context, policy: WalletSecurityPolicy): EudiWalletConfig =
-        build(WalletStorage.documentsDir(context), policy)
+        build(WalletStorage.databaseFile(context), policy)
 }
