@@ -50,6 +50,15 @@ android {
             // WRPRC-provider trust anchor (public only; the provider key is offline, provisioned
             // by Workstream A). Empty placeholder until published: registration checks fail closed.
             buildConfigField("String", "WRPRC_TRUST_ANCHORS_RES", "\"demo_wrprc_trust_anchors\"")
+            // Public signed WRPRC status lists to refresh out of band (comma-separated). The demo
+            // publisher serves a valid and a revoked list; refreshing both lets a revoked WRPRC
+            // resolve to Revoked rather than only fail-closed-unknown. Empty until published.
+            buildConfigField(
+                "String",
+                "WRPRC_STATUS_LIST_URLS",
+                "\"https://verifier-sandbox.nachweis.tech/trust/status/wrprc-valid.jwt," +
+                    "https://verifier-sandbox.nachweis.tech/trust/status/wrprc-revoked.jwt\"",
+            )
             // Public OpenID4VCI client id for the demo issuer tenant.
             buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis-demo\"")
             // Developer-local issuer override (empty unless set in local.properties). Only the
@@ -66,6 +75,8 @@ android {
             buildConfigField("String", "VERIFIER_BASE_URL", "\"https://verifier.nachweis.tech\"")
             buildConfigField("String", "TRUST_ANCHORS_RES", "\"production_trust_anchors\"")
             buildConfigField("String", "WRPRC_TRUST_ANCHORS_RES", "\"production_wrprc_trust_anchors\"")
+            // No status lists published for the placeholder production hosts: fail closed.
+            buildConfigField("String", "WRPRC_STATUS_LIST_URLS", "\"\"")
             buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis\"")
             // Production never honors a local override.
             buildConfigField("String", "LOCAL_ISSUER_OVERRIDE", "\"\"")

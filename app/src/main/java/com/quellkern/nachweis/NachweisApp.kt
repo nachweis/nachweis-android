@@ -10,11 +10,14 @@ import com.quellkern.nachweis.issuance.IssuanceController
 import com.quellkern.nachweis.issuance.IssuerAllowlist
 import com.quellkern.nachweis.issuance.WalletDocumentStore
 import com.quellkern.nachweis.presentation.CachedStatusSource
-import com.quellkern.nachweis.presentation.CachedWrprcStatusSource
 import com.quellkern.nachweis.presentation.DefaultOid4vpGateway
 import com.quellkern.nachweis.presentation.DefaultRegistrationEvaluator
+import com.quellkern.nachweis.presentation.HttpStatusListFetcher
 import com.quellkern.nachweis.presentation.PresentationController
 import com.quellkern.nachweis.presentation.PresentationRequestValidator
+import com.quellkern.nachweis.presentation.StatusListRefresher
+import com.quellkern.nachweis.presentation.StatusListVerifier
+import com.quellkern.nachweis.presentation.SwappableWrprcStatusSource
 import com.quellkern.nachweis.presentation.TrustStore
 import com.quellkern.nachweis.presentation.WrprcValidator
 import com.quellkern.nachweis.wallet.DefaultWalletProvider
@@ -25,6 +28,7 @@ import eu.europa.ec.eudi.wallet.EudiWallet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 
 /**
@@ -51,12 +55,49 @@ class NachweisApp : Application() {
     private var issuance: IssuanceController? = null
     private var presentation: PresentationController? = null
 
+    // The WRPRC status source handed to the registration evaluator once; its backing lists are
+    // swapped in by [statusRefresher] after each out-of-band refresh. Starts empty (every lookup
+    // Unknown → fail closed) until the first refresh completes.
+    private val wrprcStatusSource = SwappableWrprcStatusSource()
+    private var statusRefresher: StatusListRefresher? = null
+
     override fun onCreate() {
         super.onCreate()
         val debuggable = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         val policy = WalletSecurityPolicy.secure(debuggable)
         val logger = SecureWalletLogger(debuggable)
         walletController = WalletController(DefaultWalletProvider(policy, logger))
+
+        // D1 client side: fetch and verify the signed WRPRC status lists out of band, off the
+        // consent path. Triggered on app start here and before a presentation via
+        // [refreshRegistrationStatus]; consent itself never touches the network.
+        statusRefresher = buildStatusRefresher()
+        refreshRegistrationStatus()
+    }
+
+    /**
+     * Build the status refresher from the active flavor's published status-list URLs and the
+     * WRPRC-provider trust anchor (the deployed status signer chains through the WRPRC provider to
+     * the same demo root, so that anchor bundle validates it). Null-safe: with no URLs configured
+     * (production placeholder) the refresher simply has no work and the cache stays empty.
+     */
+    private fun buildStatusRefresher(): StatusListRefresher =
+        StatusListRefresher(
+            fetcher = HttpStatusListFetcher(),
+            statusVerifier = StatusListVerifier(loadTrustStore(AppConfig.wrprcTrustAnchorsResourceName)),
+            statusListUris = AppConfig.wrprcStatusListUrls,
+            target = wrprcStatusSource,
+        )
+
+    /**
+     * Trigger an out-of-band refresh of the signed WRPRC status lists on the IO dispatcher. Call
+     * on app start and before beginning a presentation. Never call from the consent path — the
+     * refresh performs network I/O, whereas consent must read only the already-cached result.
+     */
+    fun refreshRegistrationStatus() {
+        val refresher = statusRefresher ?: return
+        if (!refresher.hasWork()) return
+        appScope.launch(Dispatchers.IO) { refresher.refresh() }
     }
 
     /** Set (or clear) the foreground activity used to raise device-authentication prompts. */
@@ -80,9 +121,9 @@ class NachweisApp : Application() {
 
     /**
      * Lazily build (once) the presentation controller for a ready [wallet]. The validator is
-     * wired with the flavor's locally bundled demo trust anchors and a status source seeded
-     * from the cached status list; with no status cache yet published (Workstream A), every
-     * status lookup is Unknown and fails closed — an honest default, not a silent pass.
+     * wired with the flavor's locally bundled demo trust anchors. The WRPRC status source is the
+     * process-wide [wrprcStatusSource]: it reflects whatever the out-of-band refresh has last
+     * verified, and reads as Unknown (fail closed) until the first refresh populates it.
      */
     fun presentationController(wallet: EudiWallet): PresentationController =
         presentation ?: run {
@@ -92,12 +133,13 @@ class NachweisApp : Application() {
             )
             // D1: the flagship registration evaluator. The WRPRC provider is a distinct actor,
             // so its trust anchor is a separate bundle from the WRPAC anchors; the WRPRC status
-            // cache is likewise separate. Both are empty until Workstream A publishes them, so
-            // registration verification fails closed rather than passing silently.
+            // list is likewise separate and refreshed out of band into [wrprcStatusSource]. Until
+            // a refresh succeeds every status lookup is Unknown, so registration verification
+            // fails closed rather than passing silently.
             val registrationEvaluator = DefaultRegistrationEvaluator(
                 wrprcValidator = WrprcValidator(
                     providerTrust = loadTrustStore(AppConfig.wrprcTrustAnchorsResourceName),
-                    statusSource = CachedWrprcStatusSource(),
+                    statusSource = wrprcStatusSource,
                 ),
             )
             PresentationController(

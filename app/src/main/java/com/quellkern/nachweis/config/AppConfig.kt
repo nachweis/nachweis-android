@@ -15,6 +15,14 @@ object AppConfig {
     val applicationId: String = BuildConfig.APPLICATION_ID
 
     /**
+     * Public signed WRPRC status-list URLs the app refreshes out of band, parsed from the
+     * comma-separated flavor field. Empty when none are published (production placeholder), in
+     * which case every WRPRC status lookup fails closed.
+     */
+    val wrprcStatusListUrls: List<String> =
+        BuildConfig.WRPRC_STATUS_LIST_URLS.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+    /**
      * Structural validity of the resolved flavor configuration: both endpoints are
      * https, issuer and verifier are distinct hosts, and a trust-root resource is named.
      */

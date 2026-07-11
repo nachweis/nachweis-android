@@ -267,6 +267,57 @@ object PresentationFixtures {
     fun verifierInfoCwt(): String =
         """[{"format":"rc-wrp+cwt","data":"0oRDoQEmoQRBMWFhWEC...cbor..."}]"""
 
+    /**
+     * Mint a conforming IETF Token Status List (`typ=statuslist+jwt`) signed by [signer], with the
+     * bits at [revokedIndices] set (revoked) and all others clear (valid). The bitstring is
+     * DEFLATE-compressed with the zlib wrapper, exactly as [StatusListVerifier] inflates it.
+     * Options let each test target one check (wrong typ, missing x5c, bad temporal fields).
+     */
+    fun statusListJwt(
+        signer: Leaf,
+        sub: String,
+        revokedIndices: Set<Int> = emptySet(),
+        sizeBytes: Int = 16,
+        bits: Int = 1,
+        iss: String = "https://verifier-sandbox.nachweis.tech/trust/status-provider",
+        iatEpochSeconds: Long = System.currentTimeMillis() / 1000 - 3600,
+        ttlSeconds: Long? = 300,
+        expEpochSeconds: Long? = null,
+        typ: String = "statuslist+jwt",
+        includeX5c: Boolean = true,
+    ): String {
+        require(bits == 1) { "fixture supports 1-bit lists only" }
+        val bitstring = ByteArray(sizeBytes)
+        for (idx in revokedIndices) {
+            bitstring[idx / 8] = (bitstring[idx / 8].toInt() or (1 shl (idx % 8))).toByte()
+        }
+        val compressed = java.io.ByteArrayOutputStream().use { out ->
+            val deflater = java.util.zip.Deflater()
+            deflater.setInput(bitstring)
+            deflater.finish()
+            val buffer = ByteArray(256)
+            while (!deflater.finished()) out.write(buffer, 0, deflater.deflate(buffer))
+            deflater.end()
+            out.toByteArray()
+        }
+        val lst = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(compressed)
+
+        val members = LinkedHashMap<String, String>()
+        members["iss"] = jsonString(iss)
+        members["sub"] = jsonString(sub)
+        members["iat"] = iatEpochSeconds.toString()
+        if (ttlSeconds != null) members["ttl"] = ttlSeconds.toString()
+        if (expEpochSeconds != null) members["exp"] = expEpochSeconds.toString()
+        members["status_list"] = """{"bits":$bits,"lst":${jsonString(lst)}}"""
+        val payloadJson = members.entries.joinToString(",", "{", "}") { "\"${it.key}\":${it.value}" }
+
+        val headerBuilder = JWSHeader.Builder(JWSAlgorithm.ES256).type(JOSEObjectType(typ))
+        if (includeX5c) headerBuilder.x509CertChain(signer.chain.map { Base64.encode(it.encoded) })
+        val jws = JWSObject(headerBuilder.build(), Payload(payloadJson))
+        jws.sign(ECDSASigner(signer.key.private as ECPrivateKey))
+        return jws.serialize()
+    }
+
     fun wrprcStatusGood(uri: String = "https://registrar.invalid/status-lists/1", idx: Int = 7): WrprcStatusSource =
         CachedWrprcStatusSource(good = setOf(CachedWrprcStatusSource.keyOf(WrprcStatusRef(uri, idx))))
 

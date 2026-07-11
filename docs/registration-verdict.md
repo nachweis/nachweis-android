@@ -95,12 +95,29 @@ the offline generator and the in-app validator are verified to agree on the real
 - **Not a full JAdES validator.** The `x5c` + claimed-signing-time (`sigT` / protected `iat`)
   marker check is a pragmatic B-B assertion sufficient to reject a generic JWS, not an ETSI
   TS 119 182-1 conformance validator. Full JAdES qualifying-property validation is future work.
-- **Fail-closed status by default.** The demo flavor now bundles the deployed public
-  WRPRC-provider trust anchor (the Nachweis Demo Root CA, shared with the WRPAC chain), so the
-  provider trust store is populated and the x5c chain validates. The **status cache** is still
-  empty until the out-of-band refresh path fetches the published signed status list, so at runtime
-  a valid WRPRC still fails closed on status (`RegistrationStatusUnavailable`) rather than passing
-  silently. The `production` flavor keeps both anchor bundles empty and fails closed entirely.
+- **Out-of-band status refresh, fail-closed until fresh.** The demo flavor bundles the deployed
+  public WRPRC-provider trust anchor (the Nachweis Demo Root CA, shared with the WRPAC chain), so
+  the provider trust store is populated and the x5c chain validates. The **signed status list** is
+  now fetched and verified out of band by `StatusListRefresher`, never during consent:
+  - **Trigger points.** `NachweisApp.onCreate` (app start) and `MainActivity.route` when a
+    presentation deep link arrives (before consent). Both call `refreshRegistrationStatus`, which
+    runs the fetch on `Dispatchers.IO`. Consent itself reads only the already-cached, decoded
+    result — the zero-network-during-consent guarantee is unchanged.
+  - **What is verified before caching.** Each configured `statuslist+jwt` (per-flavor
+    `WRPRC_STATUS_LIST_URLS`) is checked by `StatusListVerifier`: `typ=statuslist+jwt`, an ES256/384/512
+    signature whose `x5c` leaf chains through the status provider to the demo root, temporal
+    validity, and `sub` equal to the exact list URI requested (so one list cannot be served for
+    another). Only then is the DEFLATE-compressed bitstring inflated and its bit read.
+  - **Freshness / staleness.** A fetched list is fresh until the earliest of a conservative
+    24 h cap, the token's own `ttl` (the deployed demo list uses `ttl=300`, so it wins), and any
+    absolute `exp`. Past that deadline a lookup returns `Unknown` again and fails closed. A failed
+    fetch or a token that fails verification never overwrites a good entry and never becomes a
+    silent pass; it simply leaves the prior entry to age out.
+  - **Result.** With a populated cache a valid WRPRC pointing at a valid list entry now genuinely
+    passes, and a revoked WRPRC (its list bit set) resolves to `Revoked` rather than merely
+    `Unknown`. `DeployedStatusListFixtureTest` pins this end-to-end against the untouched public
+    `status/wrprc-valid.jwt` and `status/wrprc-revoked.jwt` artifacts. The `production` flavor
+    publishes no status URLs and keeps both anchor bundles empty, so it fails closed entirely.
 - **CWT/CBOR-AdES** is recognised and explicitly rejected. V1.2.1 permits it; this app supports
   only the JWT profile.
 
