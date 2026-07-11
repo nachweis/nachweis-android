@@ -63,15 +63,29 @@ class TrustStore(anchors: Collection<X509Certificate>) {
         fun fromPem(pem: String): TrustStore = TrustStore(parsePemCertificates(pem.byteInputStream()))
 
         /** Parse all certificates from a PEM [stream]; returns empty when none are present. */
-        fun parsePemCertificates(stream: InputStream): List<X509Certificate> = try {
+        fun parsePemCertificates(stream: InputStream): List<X509Certificate> {
+            val text = stream.bufferedReader().use { it.readText() }
             val factory = CertificateFactory.getInstance("X.509")
-            stream.use { input ->
-                factory.generateCertificates(input).filterIsInstance<X509Certificate>()
-            }
-        } catch (_: CertificateException) {
-            // A PEM with no certificate blocks throws rather than returning empty; treat it
-            // as an empty anchor set.
-            emptyList()
+            // Isolate each PEM CERTIFICATE block before decoding. Android's Conscrypt provider
+            // parses *zero* certificates when a block is preceded by comment lines (our anchors
+            // carry a leading `#` provenance header), whereas OpenJDK skips the preamble — so
+            // handing the raw stream to generateCertificates() silently yields an empty,
+            // trusts-nothing anchor set on device while every JVM test passes. Feeding clean
+            // blocks one at a time makes parsing identical across providers.
+            return PEM_CERTIFICATE.findAll(text).mapNotNull { match ->
+                try {
+                    match.value.byteInputStream().use {
+                        factory.generateCertificate(it) as X509Certificate
+                    }
+                } catch (_: CertificateException) {
+                    null
+                }
+            }.toList()
         }
+
+        private val PEM_CERTIFICATE = Regex(
+            "-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+            RegexOption.DOT_MATCHES_ALL,
+        )
     }
 }

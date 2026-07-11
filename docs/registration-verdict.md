@@ -121,6 +121,37 @@ the offline generator and the in-app validator are verified to agree on the real
 - **CWT/CBOR-AdES** is recognised and explicitly rejected. V1.2.1 permits it; this app supports
   only the JWT profile.
 
+## Live reconciliation against the deployed sandbox (verified on device)
+
+Driving the flagship against the real deployed augenmass verifier
+(`verifier-sandbox.nachweis.tech`) surfaced three gaps that every JVM test had missed because the
+fixtures were locally minted. All three are fixed and now carry regression tests; the on-device run
+renders the correct "outside this verifier's registration" verdict (naming `given_name`,
+`family_name`) for augenmass's request, whose DCQL asks `given_name` + `family_name` +
+`age_equal_or_over.18` while its WRPRC registers only `age_equal_or_over.18`.
+
+- **`verifier_info` entry format.** The extractor keyed the registration entry on
+  `format == "rc-wrp+jwt"`, conflating the WRPRC's JWT `typ` with the outer OpenID4VP
+  `verifier_info` entry format. The deployed verifiers label the entry `registration_cert` and put
+  the compact JWS WRPRC in `data`. `WrprcExtractor` now recognises `registration_cert` (and the
+  legacy value), decides the JWT profile by requiring `data` to be a compact JWS — a CBOR/CWT
+  payload under the same outer format is still rejected — and leaves the `typ=rc-wrp+jwt` check to
+  `WrprcValidator`.
+- **PEM anchor parsing on device.** The bundled anchor PEMs carry a leading `#` provenance header.
+  OpenJDK's `CertificateFactory` skips it, but Android's Conscrypt parsed **zero** certificates, so
+  every trust store (WRPAC path, WRPRC provider, status signer) silently loaded empty and trusted
+  nothing while the JVM suite stayed green. `TrustStore.parsePemCertificates` now isolates each PEM
+  block before decoding, so parsing is identical across providers. `DeployedWrpacTrustInstrumentedTest`
+  guards it on device.
+- **WRPAC revocation (CRL).** B5's access-cert status check read an empty `CachedStatusSource`, so a
+  live WRPAC failed closed at step (6) before D1 ran. `WrpacCrlRefresher` now fetches the deployed
+  signed CRL out of band (app start / before a presentation, never during consent), verifies it (the
+  bundled public WRPAC-provider issuer cert chains to the demo root, the CRL is signed under that
+  key and temporally current), and publishes a `WrpacCrlStatusSource` that resolves a non-listed
+  leaf to `Good` and a listed serial to `Revoked`, fail-closed while the cache is empty or stale.
+  `WrpacCrlStatusTest` pins this against the untouched public `wrpac/wrpac-provider.crl.der`. The
+  `production` flavor publishes no CRL URL and keeps failing closed.
+
 ## Acceptance matrix
 
 Implemented end-to-end in `RegistrationAcceptanceMatrixTest` (through the real

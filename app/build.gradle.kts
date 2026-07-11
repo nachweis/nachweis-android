@@ -59,6 +59,15 @@ android {
                 "\"https://verifier-sandbox.nachweis.tech/trust/status/wrprc-valid.jwt," +
                     "https://verifier-sandbox.nachweis.tech/trust/status/wrprc-revoked.jwt\"",
             )
+            // Public signed WRPAC revocation list (CRL) refreshed out of band, plus the public
+            // WRPAC-provider issuer cert used to verify it (chains to the bundled demo root).
+            // Empty on production: the access-cert revocation check then fails closed.
+            buildConfigField(
+                "String",
+                "WRPAC_CRL_URL",
+                "\"https://verifier-sandbox.nachweis.tech/trust/wrpac/wrpac-provider.crl.der\"",
+            )
+            buildConfigField("String", "WRPAC_ISSUER_CERT_RES", "\"demo_wrpac_provider\"")
             // Public OpenID4VCI client id for the demo issuer tenant.
             buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis-demo\"")
             // Developer-local issuer override (empty unless set in local.properties). Only the
@@ -77,6 +86,9 @@ android {
             buildConfigField("String", "WRPRC_TRUST_ANCHORS_RES", "\"production_wrprc_trust_anchors\"")
             // No status lists published for the placeholder production hosts: fail closed.
             buildConfigField("String", "WRPRC_STATUS_LIST_URLS", "\"\"")
+            // No WRPAC CRL published for the placeholder production hosts: fail closed.
+            buildConfigField("String", "WRPAC_CRL_URL", "\"\"")
+            buildConfigField("String", "WRPAC_ISSUER_CERT_RES", "\"\"")
             buildConfigField("String", "OID4VCI_CLIENT_ID", "\"nachweis\"")
             // Production never honors a local override.
             buildConfigField("String", "LOCAL_ISSUER_OVERRIDE", "\"\"")

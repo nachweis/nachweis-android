@@ -9,17 +9,20 @@ import com.quellkern.nachweis.issuance.DocumentStore
 import com.quellkern.nachweis.issuance.IssuanceController
 import com.quellkern.nachweis.issuance.IssuerAllowlist
 import com.quellkern.nachweis.issuance.WalletDocumentStore
-import com.quellkern.nachweis.presentation.CachedStatusSource
 import com.quellkern.nachweis.presentation.DefaultOid4vpGateway
 import com.quellkern.nachweis.presentation.DefaultRegistrationEvaluator
+import com.quellkern.nachweis.presentation.HttpCrlFetcher
 import com.quellkern.nachweis.presentation.HttpStatusListFetcher
 import com.quellkern.nachweis.presentation.PresentationController
 import com.quellkern.nachweis.presentation.PresentationRequestValidator
 import com.quellkern.nachweis.presentation.StatusListRefresher
 import com.quellkern.nachweis.presentation.StatusListVerifier
+import com.quellkern.nachweis.presentation.SwappableRequestStatusSource
 import com.quellkern.nachweis.presentation.SwappableWrprcStatusSource
 import com.quellkern.nachweis.presentation.TrustStore
+import com.quellkern.nachweis.presentation.WrpacCrlRefresher
 import com.quellkern.nachweis.presentation.WrprcValidator
+import java.security.cert.X509Certificate
 import com.quellkern.nachweis.wallet.DefaultWalletProvider
 import com.quellkern.nachweis.wallet.SecureWalletLogger
 import com.quellkern.nachweis.wallet.WalletController
@@ -61,6 +64,12 @@ class NachweisApp : Application() {
     private val wrprcStatusSource = SwappableWrprcStatusSource()
     private var statusRefresher: StatusListRefresher? = null
 
+    // The WRPAC access-cert revocation source handed to the presentation validator once; the CRL
+    // refresher swaps in a verified CRL after each out-of-band refresh. Starts empty (every lookup
+    // Unknown → fail closed) until the first refresh publishes a signed, current CRL.
+    private val wrpacStatusSource = SwappableRequestStatusSource()
+    private var wrpacCrlRefresher: WrpacCrlRefresher? = null
+
     override fun onCreate() {
         super.onCreate()
         val debuggable = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -72,6 +81,7 @@ class NachweisApp : Application() {
         // consent path. Triggered on app start here and before a presentation via
         // [refreshRegistrationStatus]; consent itself never touches the network.
         statusRefresher = buildStatusRefresher()
+        wrpacCrlRefresher = buildWrpacCrlRefresher()
         refreshRegistrationStatus()
     }
 
@@ -90,14 +100,33 @@ class NachweisApp : Application() {
         )
 
     /**
-     * Trigger an out-of-band refresh of the signed WRPRC status lists on the IO dispatcher. Call
-     * on app start and before beginning a presentation. Never call from the consent path — the
-     * refresh performs network I/O, whereas consent must read only the already-cached result.
+     * Build the WRPAC CRL refresher from the active flavor's published CRL URL and the bundled
+     * public WRPAC-provider issuer certificate. The issuer cert is verified to chain to the WRPAC
+     * trust anchor before its CRL is trusted. Null-safe: with no URL or issuer cert (production
+     * placeholder) the refresher has no work and the access-cert status stays fail-closed.
+     */
+    private fun buildWrpacCrlRefresher(): WrpacCrlRefresher =
+        WrpacCrlRefresher(
+            fetcher = HttpCrlFetcher(),
+            crlUri = AppConfig.wrpacCrlUrl,
+            issuerCert = loadWrpacIssuerCert(),
+            trustStore = loadTrustStore(AppConfig.trustAnchorsResourceName),
+            target = wrpacStatusSource,
+        )
+
+    /**
+     * Trigger an out-of-band refresh of the signed WRPRC status lists and the WRPAC CRL on the IO
+     * dispatcher. Call on app start and before beginning a presentation. Never call from the
+     * consent path — the refresh performs network I/O, whereas consent must read only the
+     * already-cached result.
      */
     fun refreshRegistrationStatus() {
-        val refresher = statusRefresher ?: return
-        if (!refresher.hasWork()) return
-        appScope.launch(Dispatchers.IO) { refresher.refresh() }
+        statusRefresher?.takeIf { it.hasWork() }?.let { r ->
+            appScope.launch(Dispatchers.IO) { r.refresh() }
+        }
+        wrpacCrlRefresher?.takeIf { it.hasWork() }?.let { r ->
+            appScope.launch(Dispatchers.IO) { r.refresh() }
+        }
     }
 
     /** Set (or clear) the foreground activity used to raise device-authentication prompts. */
@@ -129,7 +158,7 @@ class NachweisApp : Application() {
         presentation ?: run {
             val validator = PresentationRequestValidator(
                 trustStore = loadTrustStore(AppConfig.trustAnchorsResourceName),
-                statusSource = CachedStatusSource(),
+                statusSource = wrpacStatusSource,
             )
             // D1: the flagship registration evaluator. The WRPRC provider is a distinct actor,
             // so its trust anchor is a separate bundle from the WRPAC anchors; the WRPRC status
@@ -158,6 +187,16 @@ class NachweisApp : Application() {
         val resId = resources.getIdentifier(resourceName, "raw", packageName)
         if (resId == 0) return TrustStore(emptyList())
         return resources.openRawResource(resId).use { TrustStore(TrustStore.parsePemCertificates(it)) }
+    }
+
+    /** Load the bundled public WRPAC-provider issuer certificate, or null when none is configured. */
+    private fun loadWrpacIssuerCert(): X509Certificate? {
+        val resourceName = AppConfig.wrpacIssuerCertResourceName
+        if (resourceName.isBlank()) return null
+        val resId = resources.getIdentifier(resourceName, "raw", packageName)
+        if (resId == 0) return null
+        return resources.openRawResource(resId)
+            .use { TrustStore.parsePemCertificates(it).firstOrNull() }
     }
 
     // The configured issuer, or the developer-local override when the demo flavor sets one.

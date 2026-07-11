@@ -23,6 +23,14 @@ object AppConfig {
         BuildConfig.WRPRC_STATUS_LIST_URLS.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
     /**
+     * Public WRPAC revocation list (CRL) URL refreshed out of band, and the raw-resource name of
+     * the public WRPAC-provider issuer certificate used to verify it. Both empty on the production
+     * placeholder, in which case the access-cert revocation check fails closed.
+     */
+    val wrpacCrlUrl: String = BuildConfig.WRPAC_CRL_URL
+    val wrpacIssuerCertResourceName: String = BuildConfig.WRPAC_ISSUER_CERT_RES
+
+    /**
      * Structural validity of the resolved flavor configuration: both endpoints are
      * https, issuer and verifier are distinct hosts, and a trust-root resource is named.
      */

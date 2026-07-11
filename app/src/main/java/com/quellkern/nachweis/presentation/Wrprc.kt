@@ -81,10 +81,25 @@ object WrprcExtractor {
     const val CWT_FORMAT: String = "rc-wrp+cwt"
 
     /**
+     * The OpenID4VP `verifier_info` entry `format` under which the deployed EUDI verifiers (and
+     * augenmass) carry a relying-party registration certificate. The JWT-vs-CWT profile is decided
+     * by the certificate encoding in `data`, not this outer format — so a compact JWS is the
+     * supported JAdES profile and anything else (CBOR/CWT) is rejected here, with the JWT `typ`
+     * re-checked by [WrprcValidator].
+     */
+    const val REGISTRATION_CERT_FORMAT: String = "registration_cert"
+
+    private val COMPACT_JWS = Regex("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$")
+
+    /**
      * Find the registration certificate in [verifierInfoJson] (the raw `verifier_info` array as
      * a JSON string, as carried by [ValidatedPresentationRequest.verifierInfo]). Each entry is
-     * `{ "format": …, "data": … }`; the first `rc-wrp+*` entry decides the outcome, so a verifier
+     * `{ "format": …, "data": … }`; the first registration entry decides the outcome, so a verifier
      * cannot smuggle an unsupported CWT past the check by pairing it with a later JWT.
+     *
+     * A registration entry is recognised by the OpenID4VP [REGISTRATION_CERT_FORMAT], or the
+     * legacy [JWT_FORMAT] the profile once assumed. Its `data` is the supported JWT WRPRC only when
+     * it is a compact JWS; a CBOR/CWT encoding (or the explicit [CWT_FORMAT]) is rejected.
      */
     fun extract(verifierInfoJson: String?): VerifierInfoResult {
         if (verifierInfoJson.isNullOrBlank()) return VerifierInfoResult.Absent
@@ -97,10 +112,15 @@ object WrprcExtractor {
             val entry = element as? JsonObject ?: continue
             val format = entry["format"]?.jsonPrimitive?.contentOrNull ?: continue
             when {
-                format.equals(JWT_FORMAT, ignoreCase = true) -> {
+                format.equals(REGISTRATION_CERT_FORMAT, ignoreCase = true) ||
+                    format.equals(JWT_FORMAT, ignoreCase = true) -> {
                     val data = entry["data"]?.jsonPrimitive?.contentOrNull
                         ?: return VerifierInfoResult.UnsupportedEncoding
-                    return VerifierInfoResult.JwtWrprc(data)
+                    return if (COMPACT_JWS.matches(data.trim())) {
+                        VerifierInfoResult.JwtWrprc(data.trim())
+                    } else {
+                        VerifierInfoResult.UnsupportedEncoding
+                    }
                 }
                 format.startsWith("rc-wrp", ignoreCase = true) -> return VerifierInfoResult.UnsupportedEncoding
             }

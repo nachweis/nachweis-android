@@ -21,6 +21,26 @@ class WrprcExtractorTest {
     }
 
     @Test
+    fun `the deployed registration_cert format with a compact JWS is selected`() {
+        // The shape the deployed EUDI verifiers (augenmass) actually send: the OpenID4VP
+        // verifier_info entry format is "registration_cert", carrying the compact JWS WRPRC.
+        val result = WrprcExtractor.extract(
+            """[{"format":"registration_cert","data":"aa-bb_cc.dd.ee"}]""",
+        )
+        assertTrue(result is VerifierInfoResult.JwtWrprc)
+        assertEquals("aa-bb_cc.dd.ee", (result as VerifierInfoResult.JwtWrprc).compactJws)
+    }
+
+    @Test
+    fun `a registration_cert entry whose data is not a compact JWS is rejected`() {
+        // A CBOR/CWT registration certificate carried under the same outer format must not pass.
+        val result = WrprcExtractor.extract(
+            """[{"format":"registration_cert","data":"a1b2c3cborbytes"}]""",
+        )
+        assertEquals(VerifierInfoResult.UnsupportedEncoding, result)
+    }
+
+    @Test
     fun `a CWT entry ahead of a JWT still rejects as unsupported`() {
         // A verifier must not smuggle an unsupported CWT past the check by trailing a JWT.
         val result = WrprcExtractor.extract(
