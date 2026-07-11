@@ -1,8 +1,6 @@
 package com.quellkern.nachweis.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -13,7 +11,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,10 +26,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.quellkern.nachweis.issuance.DocumentSummary
 import com.quellkern.nachweis.issuance.IssuanceState
-import com.quellkern.nachweis.presentation.PresentationError
 import com.quellkern.nachweis.presentation.PresentationState
 import com.quellkern.nachweis.presentation.RegistrationVerdict
 import com.quellkern.nachweis.presentation.ValidatedPresentationRequest
+import com.quellkern.nachweis.ui.components.StatusBanner
+import com.quellkern.nachweis.ui.components.StatusKind
+import com.quellkern.nachweis.ui.theme.MonoTextStyle
 import com.quellkern.nachweis.wallet.WalletState
 
 /**
@@ -170,8 +169,8 @@ private fun PresentationConsentDialog(
                 )
                 request.requestedClaims.forEach { claim ->
                     Text(
-                        text = "• ${claim.path}",
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = claim.path,
+                        style = MonoTextStyle,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 6.dp)
@@ -196,34 +195,26 @@ private fun PresentationConsentDialog(
 }
 
 /**
- * The trust verdict banner. For B5's [RegistrationVerdict.NotEvaluated] it states only what
- * B5 proved: the sender's certificate is trusted and current. The
- * [RegistrationVerdict.OutsideRegistration] copy is fixed by dev-plan.md D1 ("outside this
- * verifier's registration") and is only ever shown once D1 fills the verdict.
+ * The trust verdict banner (design-tokens.md §6.3), rendered with the neo-brutal [StatusBanner]:
+ * status-hue fill, ink text and glyph, ink border. For B5's [RegistrationVerdict.NotEvaluated] it
+ * states only what B5 proved (the sender's certificate is trusted and current) using the verified
+ * glyph. The [RegistrationVerdict.OutsideRegistration] copy is fixed by dev-plan.md D1 ("outside
+ * this verifier's registration"), shown on the over-red fill with the distinct slash-circle glyph;
+ * the word "over-ask" never appears.
  */
 @Composable
 private fun VerdictBanner(verdict: RegistrationVerdict, verifierIdentity: String) {
-    val message = when (verdict) {
-        RegistrationVerdict.NotEvaluated -> "Verified sender: $verifierIdentity"
-        RegistrationVerdict.InsideRegistration -> "$verifierIdentity — within this verifier's registration"
+    val (kind, message) = when (verdict) {
+        RegistrationVerdict.NotEvaluated ->
+            StatusKind.Verified to "Verified sender: $verifierIdentity"
+        RegistrationVerdict.InsideRegistration ->
+            StatusKind.Verified to "$verifierIdentity — within this verifier's registration"
         is RegistrationVerdict.OutsideRegistration ->
-            "$verifierIdentity — outside this verifier's registration. " +
+            StatusKind.OutsideRegistration to
+                "$verifierIdentity — outside this verifier's registration. " +
                 "Outside its registration: ${verdict.claimsOutside.joinToString(", ")}"
     }
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite },
-            horizontalArrangement = Arrangement.Start,
-        ) {
-            Text(text = message, style = MaterialTheme.typography.titleSmall)
-        }
-    }
+    StatusBanner(kind = kind, message = message)
 }
 
 @Composable

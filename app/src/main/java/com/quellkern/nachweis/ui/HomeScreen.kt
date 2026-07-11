@@ -35,7 +35,7 @@ fun WalletStatus(state: WalletState, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.displaySmall,
         )
         Text(
             text = walletStatusText(state),

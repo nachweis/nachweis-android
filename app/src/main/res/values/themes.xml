@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.Nachweis" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Launch/window theme only. The runtime UI is Compose (NachweisTheme); this just paints the
+         window paper (not white) until the first frame, so there is no bright flash. -->
+    <style name="Theme.Nachweis" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/paper</item>
+    </style>
 </resources>

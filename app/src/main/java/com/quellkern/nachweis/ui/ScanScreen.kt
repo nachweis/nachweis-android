@@ -16,9 +16,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.quellkern.nachweis.ui.components.PrimaryButton
+import com.quellkern.nachweis.ui.components.SecondaryButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -82,14 +83,16 @@ fun ScanScreen(
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
             )
-            Button(
+            PrimaryButton(
+                label = "Allow camera",
                 onClick = { launcher.launch(Manifest.permission.CAMERA) },
                 modifier = Modifier.padding(top = 16.dp),
-            ) { Text("Allow camera") }
-            Button(
+            )
+            SecondaryButton(
+                label = "Back",
                 onClick = onCancel,
                 modifier = Modifier.padding(top = 8.dp),
-            ) { Text("Back") }
+            )
         }
     }
 }
