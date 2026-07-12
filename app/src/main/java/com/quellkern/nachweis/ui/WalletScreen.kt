@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.quellkern.nachweis.issuance.CredentialDetail
 import com.quellkern.nachweis.issuance.DocumentSummary
 import com.quellkern.nachweis.issuance.IssuanceState
 import com.quellkern.nachweis.presentation.PresentationState
@@ -56,6 +57,7 @@ fun WalletScreen(
     onPresentationDecline: () -> Unit,
     onPresentationDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    loadDetail: (String) -> CredentialDetail? = { null },
 ) {
     Scaffold(modifier = modifier) { padding ->
         val content = Modifier.padding(padding)
@@ -65,6 +67,7 @@ fun WalletScreen(
                     documents = documents,
                     onScanned = onScanned,
                     modifier = content,
+                    loadDetail = loadDetail,
                 )
             else -> WalletStatus(walletState, modifier = content)
         }
@@ -98,17 +101,26 @@ internal fun WalletReadyContent(
     documents: List<DocumentSummary>,
     onScanned: (String) -> Unit,
     modifier: Modifier = Modifier,
+    loadDetail: (String) -> CredentialDetail? = { null },
     scanner: @Composable (onScanned: (String) -> Unit, onCancel: () -> Unit, modifier: Modifier) -> Unit =
         { onScan, onCancel, scanModifier ->
             ScanScreen(onScanned = onScan, onCancel = onCancel, modifier = scanModifier)
         },
 ) {
     var scanning by remember { mutableStateOf(false) }
+    var openDocumentId by remember { mutableStateOf<String?>(null) }
+    // Resolve the tapped credential's claims lazily and only while a detail is open; keyed on the
+    // id so it re-resolves after a refresh (e.g. the document was removed) and yields null then.
+    val detail = remember(openDocumentId) { openDocumentId?.let(loadDetail) }
+
     // Only intercept Back while the scanner is showing; on the list, Back keeps its default
-    // (leave the app), so this never traps the user on the credential list.
+    // (leave the app), so this never traps the user on the credential list. The scanner takes
+    // precedence over the detail view; each handler is enabled only for its own surface.
     BackHandler(enabled = scanning) { scanning = false }
-    if (scanning) {
-        scanner(
+    BackHandler(enabled = !scanning && detail != null) { openDocumentId = null }
+
+    when {
+        scanning -> scanner(
             { value ->
                 scanning = false
                 onScanned(value)
@@ -116,11 +128,16 @@ internal fun WalletReadyContent(
             { scanning = false },
             modifier,
         )
-    } else {
-        DocumentListScreen(
+        detail != null -> CredentialDetailScreen(
+            detail = detail,
+            onBack = { openDocumentId = null },
+            modifier = modifier,
+        )
+        else -> DocumentListScreen(
             documents = documents,
             onScanClick = { scanning = true },
             modifier = modifier,
+            onDocumentClick = { openDocumentId = it },
         )
     }
 }

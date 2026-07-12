@@ -126,6 +126,7 @@ class MainActivity : FragmentActivity() {
             onPresentationConfirm = { presentation.confirm() },
             onPresentationDecline = { presentation.decline() },
             onPresentationDismiss = { presentation.reset() },
+            loadDetail = { id -> store.details(id) },
         )
     }
 

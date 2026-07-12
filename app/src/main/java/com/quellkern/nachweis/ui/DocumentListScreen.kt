@@ -28,6 +28,7 @@ fun DocumentListScreen(
     documents: List<DocumentSummary>,
     onScanClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onDocumentClick: (String) -> Unit = {},
 ) {
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text(
@@ -51,6 +52,7 @@ fun DocumentListScreen(
                         issuer = document.typeLabel,
                         status = StatusKind.Verified,
                         modifier = Modifier.padding(bottom = 12.dp),
+                        onClick = { onDocumentClick(document.id) },
                     )
                 }
             }
