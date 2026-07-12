@@ -15,9 +15,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -59,6 +61,7 @@ fun WalletScreen(
     modifier: Modifier = Modifier,
     loadDetail: (String) -> CredentialDetail? = { null },
     onDelete: (String) -> Boolean = { false },
+    viewGate: suspend () -> Boolean = { true },
 ) {
     Scaffold(modifier = modifier) { padding ->
         val content = Modifier.padding(padding)
@@ -70,6 +73,7 @@ fun WalletScreen(
                     modifier = content,
                     loadDetail = loadDetail,
                     onDelete = onDelete,
+                    viewGate = viewGate,
                 )
             else -> WalletStatus(walletState, modifier = content)
         }
@@ -97,6 +101,11 @@ fun WalletScreen(
  * activity — which, as the app's single root, would otherwise exit to the launcher (evidence
  * finding #2). [scanner] is injectable purely so the back-navigation is testable without the
  * camera; production always uses [ScanScreen].
+ *
+ * Opening a credential is gated behind [viewGate], a fresh device authentication: viewing stored
+ * claim values is a data disclosure, so the detail's claims are read and shown only after the gate
+ * passes, never before. [viewGate] defaults open so the seam is testable without a secure lock;
+ * production supplies the real BiometricPrompt gate.
  */
 @Composable
 internal fun WalletReadyContent(
@@ -105,22 +114,37 @@ internal fun WalletReadyContent(
     modifier: Modifier = Modifier,
     loadDetail: (String) -> CredentialDetail? = { null },
     onDelete: (String) -> Boolean = { false },
+    viewGate: suspend () -> Boolean = { true },
     scanner: @Composable (onScanned: (String) -> Unit, onCancel: () -> Unit, modifier: Modifier) -> Unit =
         { onScan, onCancel, scanModifier ->
             ScanScreen(onScanned = onScan, onCancel = onCancel, modifier = scanModifier)
         },
 ) {
     var scanning by remember { mutableStateOf(false) }
-    var openDocumentId by remember { mutableStateOf<String?>(null) }
-    // Resolve the tapped credential's claims lazily and only while a detail is open; keyed on the
-    // id so it re-resolves after a refresh (e.g. the document was removed) and yields null then.
-    val detail = remember(openDocumentId) { openDocumentId?.let(loadDetail) }
+    // Saveable so a configuration change or process recreation restores the same gate rather than
+    // re-showing (or dropping) a credential's claims without crossing the device-auth gate again.
+    var gate by rememberSaveable(stateSaver = CredentialViewGate.Saver) {
+        mutableStateOf(CredentialViewGate.Closed)
+    }
+    // Resolve the tapped credential's claims only once its gate is unlocked (keyed on visibleId, not
+    // the opened id), so claim values never enter the composition before the authentication passes;
+    // re-resolves after a refresh (e.g. the document was removed) and yields null then.
+    val detail = remember(gate.visibleId) { gate.visibleId?.let(loadDetail) }
+
+    // Raise the device-auth gate whenever a credential is open but not yet unlocked. Success unlocks
+    // it (its claims then compose); cancel or failure returns to the list with nothing disclosed.
+    val pendingId = gate.pendingId
+    LaunchedEffect(pendingId) {
+        if (pendingId != null) {
+            gate = if (viewGate()) gate.unlock(pendingId) else gate.close()
+        }
+    }
 
     // Only intercept Back while the scanner is showing; on the list, Back keeps its default
     // (leave the app), so this never traps the user on the credential list. The scanner takes
     // precedence over the detail view; each handler is enabled only for its own surface.
     BackHandler(enabled = scanning) { scanning = false }
-    BackHandler(enabled = !scanning && detail != null) { openDocumentId = null }
+    BackHandler(enabled = !scanning && detail != null) { gate = gate.close() }
 
     when {
         scanning -> scanner(
@@ -133,17 +157,17 @@ internal fun WalletReadyContent(
         )
         detail != null -> CredentialDetailScreen(
             detail = detail,
-            onBack = { openDocumentId = null },
+            onBack = { gate = gate.close() },
             modifier = modifier,
             // On a successful delete the caller refreshes the list; close the detail so the (now
             // shorter) list shows. On failure stay on the detail so the credential is still there.
-            onDelete = { if (onDelete(detail.id)) openDocumentId = null },
+            onDelete = { if (onDelete(detail.id)) gate = gate.close() },
         )
         else -> DocumentListScreen(
             documents = documents,
             onScanClick = { scanning = true },
             modifier = modifier,
-            onDocumentClick = { openDocumentId = it },
+            onDocumentClick = { gate = gate.open(it) },
         )
     }
 }

@@ -58,6 +58,11 @@ class NachweisApp : Application() {
     // a backgrounded activity is never used to raise an authentication prompt.
     private var activityRef = WeakReference<FragmentActivity>(null)
 
+    // Device-auth gate in front of viewing a credential's stored claims. Shares the foreground
+    // activity seam and the BIOMETRIC_STRONG-or-DEVICE_CREDENTIAL posture of the key authenticators,
+    // but unlocks no key (a UI gate). Stateless, so a single instance is reused for every view.
+    private val deviceAuthGate = BiometricDeviceAuthGate { activityRef.get() }
+
     private var issuance: IssuanceController? = null
     private var presentation: PresentationController? = null
 
@@ -165,6 +170,9 @@ class NachweisApp : Application() {
     fun setForegroundActivity(activity: FragmentActivity?) {
         activityRef = WeakReference(activity)
     }
+
+    /** Raise the device-auth gate guarding a credential detail view; true once the user passes it. */
+    suspend fun authenticateToViewClaims(): Boolean = deviceAuthGate.authenticate()
 
     /** Lazily build (once) the issuance controller for a ready [wallet]. */
     fun issuanceController(wallet: EudiWallet): IssuanceController =

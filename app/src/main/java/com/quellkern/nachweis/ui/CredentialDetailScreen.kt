@@ -29,9 +29,10 @@ import com.quellkern.nachweis.ui.theme.MonoTextStyle
 
 /**
  * A stored credential's full claim set, shown after an explicit tap from the list. Stateless: it
- * renders the [detail] it is handed and calls [onBack] for navigation. Display-only by design —
- * viewing user-owned data needs no fresh device authentication (key operations remain auth-gated);
- * the values live only in this composition and never re-enter the list model or any log.
+ * renders the [detail] it is handed and calls [onBack] for navigation. The caller ([WalletReadyContent])
+ * only resolves and passes a [detail] once its device-auth gate has been passed, so this screen is
+ * reached only after a fresh authentication; the values live only in this composition and never
+ * re-enter the list model or any log.
  *
  * Each claim is a label-over-mono-value row inside the neo-brutal card surface; every row is a
  * single merged semantics node so TalkBack speaks "{path}: {value}" once.
