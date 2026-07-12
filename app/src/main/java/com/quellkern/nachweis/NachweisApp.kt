@@ -21,6 +21,7 @@ import com.quellkern.nachweis.presentation.StatusListVerifier
 import com.quellkern.nachweis.presentation.SwappableRequestStatusSource
 import com.quellkern.nachweis.presentation.SwappableWrprcStatusSource
 import com.quellkern.nachweis.presentation.TrustStore
+import com.quellkern.nachweis.presentation.WalletPresentationTransport
 import com.quellkern.nachweis.presentation.WrpacCrlRefresher
 import com.quellkern.nachweis.presentation.WrprcValidator
 import java.security.cert.X509Certificate
@@ -205,7 +206,7 @@ class NachweisApp : Application() {
             )
             PresentationController(
                 gateway = DefaultOid4vpGateway(
-                    wallet = wallet,
+                    transport = WalletPresentationTransport(wallet),
                     authenticator = BiometricPresentationAuthenticator { activityRef.get() },
                 ),
                 validator = validator,

@@ -1,6 +1,5 @@
 package com.quellkern.nachweis.presentation
 
-import android.net.Uri
 import eu.europa.ec.eudi.iso18013.transfer.TransferEvent
 import eu.europa.ec.eudi.iso18013.transfer.response.DisclosedDocument
 import eu.europa.ec.eudi.iso18013.transfer.response.DisclosedDocuments
@@ -8,19 +7,20 @@ import eu.europa.ec.eudi.iso18013.transfer.response.DocItem
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.Response
 import eu.europa.ec.eudi.iso18013.transfer.response.ResponseResult
-import eu.europa.ec.eudi.wallet.EudiWallet
-import eu.europa.ec.eudi.wallet.document.DocumentExtensions.getDefaultKeyUnlockData
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.multipaz.crypto.Algorithm
 import org.multipaz.securearea.AndroidKeystoreKeyUnlockData
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * The real [Oid4vpGateway], backed by wallet-core's presentation manager (the [EudiWallet]
- * itself implements it). Split into two honestly-different halves:
+ * The real [Oid4vpGateway], backed by wallet-core's presentation manager through the injected
+ * [PresentationTransport] (the [WalletPresentationTransport] adapter, so the wallet-core and
+ * Android surface stays out of this class and its JVM tests). Split into two honestly-different
+ * halves:
  *
  *  - [obtainSignedRequest] is **real and exercised**: it lifts the signed request object out
  *    of the deep link — either a `request` value carried inline, or the body fetched from a
@@ -38,7 +38,7 @@ import java.net.URL
  *    rejects every request with `error("Not supported scheme")`.
  */
 class DefaultOid4vpGateway(
-    private val wallet: EudiWallet,
+    private val transport: PresentationTransport,
     private val authenticator: PresentationAuthenticator,
 ) : Oid4vpGateway {
 
@@ -49,11 +49,10 @@ class DefaultOid4vpGateway(
 
     override suspend fun obtainSignedRequest(requestUri: String): SignedPresentationRequest {
         lastRequestUri = requestUri
-        val uri = Uri.parse(requestUri)
-        uri.getQueryParameter("request")?.let { inline ->
+        queryParameter(requestUri, "request")?.let { inline ->
             return SignedPresentationRequest(inline)
         }
-        val byReference = uri.getQueryParameter("request_uri")
+        val byReference = queryParameter(requestUri, "request_uri")
             ?: throw IllegalArgumentException("no request or request_uri in presentation link")
         return SignedPresentationRequest(fetch(byReference))
     }
@@ -88,11 +87,11 @@ class DefaultOid4vpGateway(
         // DCQL query; the validator has confirmed the query is the supported SD-JWT PID set.
         // Each disclosed document carries its own key-unlock data: the PID signing key is minted
         // under per-use device authentication (WalletSecurityPolicy), so the key-binding JWT that
-        // proves holder binding cannot be signed until the user authenticates. getDefaultKeyUnlockData
+        // proves holder binding cannot be signed until the user authenticates. keyUnlockDataFor
         // returns null for a key that needs no auth, in which case nothing is unlocked.
         val disclosed = success.requestedDocuments.map { requested ->
             val items: List<DocItem> = requested.requestedItems.keys.toList()
-            val unlock = wallet.getDefaultKeyUnlockData(requested.documentId)
+            val unlock = transport.keyUnlockDataFor(requested.documentId)
             DisclosedDocument(requested, items, unlock)
         }
         // Authenticate once per signing key, on the exact unlock-data instances embedded above,
@@ -115,12 +114,12 @@ class DefaultOid4vpGateway(
                 else -> Unit
             }
         }
-        wallet.addTransferEventListener(listener)
+        transport.addTransferEventListener(listener)
         return try {
-            wallet.startRemotePresentation(Uri.parse(requestUri), null)
+            transport.startRemotePresentation(requestUri)
             deferred.await()
         } finally {
-            wallet.removeTransferEventListener(listener)
+            transport.removeTransferEventListener(listener)
         }
     }
 
@@ -142,16 +141,77 @@ class DefaultOid4vpGateway(
                 else -> Unit
             }
         }
-        wallet.addTransferEventListener(listener)
+        transport.addTransferEventListener(listener)
         try {
-            wallet.sendResponse(response)
+            transport.sendResponse(response)
             deferred.await()
         } finally {
-            wallet.removeTransferEventListener(listener)
+            transport.removeTransferEventListener(listener)
         }
     }
 
     override fun reject() {
-        runCatching { wallet.rejectRemotePresentation() }
+        runCatching { transport.rejectRemotePresentation() }
+    }
+
+    /**
+     * Extract the first `name` query parameter from [raw], reproducing
+     * [android.net.Uri.getQueryParameter] for presentation deep links so the SDK's `Uri` type stays
+     * out of this class (and its JVM tests): the query is the span after the first `?` up to the
+     * first following `#`; parameters split on `&`, name from value on the first `=`; the first
+     * matching name wins; the value is percent-decoded as UTF-8. A literal `+` is left as `+` (not
+     * turned into a space) — matching `Uri.decode`; the request/request_uri values are percent- and
+     * base64url-encoded, so `+` never occurs literally in practice. Returns null when absent, `""`
+     * for a present-but-valueless parameter.
+     */
+    private fun queryParameter(raw: String, name: String): String? {
+        val q = raw.indexOf('?')
+        if (q < 0) return null
+        val hash = raw.indexOf('#', q + 1)
+        val query = if (hash < 0) raw.substring(q + 1) else raw.substring(q + 1, hash)
+        val length = query.length
+        var start = 0
+        while (true) {
+            val amp = query.indexOf('&', start)
+            val end = if (amp != -1) amp else length
+            var separator = query.indexOf('=', start)
+            if (separator == -1 || separator > end) separator = end
+            if (separator - start == name.length && query.regionMatches(start, name, 0, name.length)) {
+                return if (separator == end) "" else percentDecodeUtf8(query.substring(separator + 1, end))
+            }
+            if (amp != -1) start = amp + 1 else break
+        }
+        return null
+    }
+
+    /** Percent-decode [s] as UTF-8, accumulating consecutive `%XX` bytes; non-escape chars pass through. */
+    private fun percentDecodeUtf8(s: String): String {
+        if (s.indexOf('%') < 0) return s
+        val out = StringBuilder(s.length)
+        val bytes = ByteArrayOutputStream()
+        fun flush() {
+            if (bytes.size() > 0) {
+                out.append(String(bytes.toByteArray(), Charsets.UTF_8))
+                bytes.reset()
+            }
+        }
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '%' && i + 2 < s.length) {
+                val hi = Character.digit(s[i + 1], 16)
+                val lo = Character.digit(s[i + 2], 16)
+                if (hi >= 0 && lo >= 0) {
+                    bytes.write((hi shl 4) + lo)
+                    i += 3
+                    continue
+                }
+            }
+            flush()
+            out.append(c)
+            i++
+        }
+        flush()
+        return out.toString()
     }
 }
