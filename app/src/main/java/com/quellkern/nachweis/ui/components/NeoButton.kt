@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.quellkern.nachweis.ui.theme.Grey
 import com.quellkern.nachweis.ui.theme.Ink
+import com.quellkern.nachweis.ui.theme.Over
 import com.quellkern.nachweis.ui.theme.nachweisColors
 
 /**
@@ -58,6 +59,23 @@ fun SecondaryButton(
     val fill = MaterialTheme.colorScheme.surface
     val content = if (enabled) MaterialTheme.colorScheme.onSurface else Grey
     NeoActionButton(label, onClick, modifier, enabled, fill, content)
+}
+
+/**
+ * Destructive action (design-tokens.md §1.2 contrast law): the over-red fill carries an **ink**
+ * label and glyph, never paper — small light text on the red would fail the contrast law, so the
+ * danger hue is used as a fill under ink, exactly like the status banners. Disabled falls back to
+ * the grey fill with an ink label, matching [PrimaryButton]. Reserved for irreversible actions.
+ */
+@Composable
+fun DangerButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val fill = if (enabled) Over else Grey
+    NeoActionButton(label, onClick, modifier, enabled, fill, Ink)
 }
 
 @Composable

@@ -4,6 +4,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Date
@@ -27,6 +28,8 @@ class PresentationControllerTest {
     private class RecordingGateway(
         private val signed: String,
         private val failObtain: Boolean = false,
+        private val obtainThrowable: Throwable = IllegalStateException("cannot reach request_uri"),
+        private val sendThrowable: Throwable? = null,
     ) : Oid4vpGateway {
         var obtainCalls = 0
         var sendCalls = 0
@@ -35,12 +38,13 @@ class PresentationControllerTest {
 
         override suspend fun obtainSignedRequest(requestUri: String): SignedPresentationRequest {
             obtainCalls++
-            if (failObtain) throw IllegalStateException("cannot reach request_uri")
+            if (failObtain) throw obtainThrowable
             return SignedPresentationRequest(signed)
         }
 
         override suspend fun sendResponse(request: ValidatedPresentationRequest, disclosedClaims: List<RequestedClaim>) {
             sendCalls++
+            sendThrowable?.let { throw it }
             lastDisclosed = disclosedClaims
         }
 
@@ -133,5 +137,81 @@ class PresentationControllerTest {
         advanceUntilIdle()
         assertEquals(PresentationState.Idle, controller.state.value)
         assertEquals(0, gateway.sendCalls)
+    }
+
+    @Test
+    fun `a network fault while obtaining the request maps to Network, not Unreadable`() = runTest {
+        val gateway = RecordingGateway(
+            PresentationFixtures.signedRequest(leaf),
+            failObtain = true,
+            obtainThrowable = java.net.UnknownHostException("verifier-sandbox.nachweis.tech"),
+        )
+        val controller = controller(gateway, this)
+
+        controller.onRequest("openid4vp://request")
+        advanceUntilIdle()
+
+        val state = controller.state.value
+        assertTrue(state is PresentationState.Rejected)
+        assertEquals(PresentationError.Network, (state as PresentationState.Rejected).error)
+    }
+
+    @Test
+    fun `a network fault while sending maps to Network`() = runTest {
+        val gateway = RecordingGateway(
+            PresentationFixtures.signedRequest(leaf),
+            sendThrowable = java.net.ConnectException("connection refused"),
+        )
+        val controller = controller(gateway, this)
+
+        controller.onRequest("openid4vp://request")
+        advanceUntilIdle()
+        controller.confirm()
+        advanceUntilIdle()
+
+        val state = controller.state.value
+        assertTrue(state is PresentationState.Rejected)
+        assertEquals(PresentationError.Network, (state as PresentationState.Rejected).error)
+        assertEquals(1, gateway.sendCalls)
+    }
+
+    @Test
+    fun `a declined device authentication while sending maps to UserAuthDeclined`() = runTest {
+        val gateway = RecordingGateway(
+            PresentationFixtures.signedRequest(leaf),
+            sendThrowable = com.quellkern.nachweis.issuance.UserAuthException("authentication error 13"),
+        )
+        val controller = controller(gateway, this)
+
+        controller.onRequest("openid4vp://request")
+        advanceUntilIdle()
+        controller.confirm()
+        advanceUntilIdle()
+
+        val state = controller.state.value
+        assertTrue(state is PresentationState.Rejected)
+        assertEquals(PresentationError.UserAuthDeclined, (state as PresentationState.Rejected).error)
+    }
+
+    @Test
+    fun `an unclassified send failure maps to Unexpected without leaking the cause`() = runTest {
+        val secret = "family_name=Mustermann"
+        val gateway = RecordingGateway(
+            PresentationFixtures.signedRequest(leaf),
+            sendThrowable = IllegalStateException(secret),
+        )
+        val controller = controller(gateway, this)
+
+        controller.onRequest("openid4vp://request")
+        advanceUntilIdle()
+        controller.confirm()
+        advanceUntilIdle()
+
+        val state = controller.state.value
+        assertTrue(state is PresentationState.Rejected)
+        val error = (state as PresentationState.Rejected).error
+        assertTrue(error is PresentationError.Unexpected)
+        assertTrue("cause is retained for triage", (error as PresentationError.Unexpected).cause is IllegalStateException)
+        assertFalse("display copy must not echo the cause", error.publicMessage.contains("Mustermann"))
     }
 }

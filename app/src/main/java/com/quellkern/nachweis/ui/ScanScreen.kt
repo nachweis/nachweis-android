@@ -11,15 +11,25 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import com.quellkern.nachweis.ui.components.PrimaryButton
 import com.quellkern.nachweis.ui.components.SecondaryButton
+import com.quellkern.nachweis.ui.theme.Ink
+import com.quellkern.nachweis.ui.theme.Paper
+import com.quellkern.nachweis.ui.theme.nachweisColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -69,7 +79,10 @@ fun ScanScreen(
     }
 
     if (hasPermission) {
-        CameraPreview(onScanned = onScanned, modifier = modifier.fillMaxSize())
+        Box(modifier = modifier.fillMaxSize()) {
+            CameraPreview(onScanned = onScanned, modifier = Modifier.fillMaxSize())
+            ScannerOverlay(onCancel = onCancel, modifier = Modifier.fillMaxSize())
+        }
     } else {
         Column(
             modifier = modifier
@@ -94,6 +107,67 @@ fun ScanScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+    }
+}
+
+/**
+ * The camera-free scanning chrome drawn over the live [CameraPreview]: a Paper-bordered
+ * viewfinder frame carrying the house hard shadow, an instruction strip, and a Cancel action
+ * wired to [onCancel]. It holds no camera or analyzer state, so it renders and is tested on its
+ * own; the viewfinder centre is transparent so the camera shows through it.
+ */
+@Composable
+internal fun ScannerOverlay(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shadow = nachweisColors.shadowOffset
+    val weight = nachweisColors.borderWeight
+    Column(
+        modifier = modifier.padding(24.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Instruction strip: Paper text on an Ink fill (design-tokens contrast law), the inverse
+        // of the paper ground so it reads clearly over an arbitrary camera image.
+        Text(
+            text = "Point the camera at the issuer's QR code",
+            color = Paper,
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Ink, RectangleShape)
+                .border(weight, Ink, RectangleShape)
+                .padding(12.dp),
+        )
+
+        // Viewfinder frame: a hollow square with an offset ink shadow behind a Paper border, so
+        // the house neo-brutal treatment frames the live camera without covering it.
+        Box(
+            modifier = Modifier
+                .size(240.dp)
+                .semantics { contentDescription = "Scanning viewfinder" },
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .offset(x = shadow, y = shadow)
+                    .border(weight, Ink, RectangleShape),
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Transparent, RectangleShape)
+                    .border(weight, Paper, RectangleShape),
+            )
+        }
+
+        SecondaryButton(
+            label = "Cancel",
+            onClick = onCancel,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
