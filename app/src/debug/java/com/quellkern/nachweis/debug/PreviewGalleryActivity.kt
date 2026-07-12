@@ -3,10 +3,13 @@ package com.quellkern.nachweis.debug
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,8 +25,10 @@ import com.quellkern.nachweis.ui.components.ErrorState
 import com.quellkern.nachweis.ui.components.PrimaryButton
 import com.quellkern.nachweis.ui.components.SecondaryButton
 import com.quellkern.nachweis.ui.components.StatusBanner
+import com.quellkern.nachweis.ui.ScannerOverlay
 import com.quellkern.nachweis.ui.components.StatusChip
 import com.quellkern.nachweis.ui.components.StatusKind
+import com.quellkern.nachweis.ui.theme.Ink
 import com.quellkern.nachweis.ui.theme.MonoTextStyle
 import com.quellkern.nachweis.ui.theme.NachweisTheme
 
@@ -70,6 +75,16 @@ private fun Gallery() {
                 kind = StatusKind.Verified,
                 message = "Bürgeramt Demo — within this verifier's registration",
             )
+
+            SectionLabel("Scanner overlay")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(360.dp)
+                    .background(Ink),
+            ) {
+                ScannerOverlay(onCancel = {}, modifier = Modifier.fillMaxSize())
+            }
 
             SectionLabel("Status chips")
             StatusChip(StatusKind.Verified)
