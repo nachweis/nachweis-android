@@ -29,6 +29,7 @@ import com.quellkern.nachweis.issuance.DocumentSummary
 import com.quellkern.nachweis.issuance.IssuanceState
 import com.quellkern.nachweis.presentation.PresentationState
 import com.quellkern.nachweis.presentation.RegistrationVerdict
+import com.quellkern.nachweis.presentation.presentationFailureTitle
 import com.quellkern.nachweis.presentation.ValidatedPresentationRequest
 import com.quellkern.nachweis.ui.components.StatusBanner
 import com.quellkern.nachweis.ui.components.StatusKind
@@ -156,7 +157,8 @@ private fun PresentationOverlay(
         PresentationState.Sending -> ProgressDialog("Sharing your credential…")
         PresentationState.Sent -> ResultDialog("Shared", "Your credential was shared with the verifier.", onDismiss)
         PresentationState.Declined -> ResultDialog("Request declined", "Nothing was shared.", onDismiss)
-        is PresentationState.Rejected -> ResultDialog("Request rejected", state.error.publicMessage, onDismiss)
+        is PresentationState.Rejected ->
+            ResultDialog(presentationFailureTitle(state.error), state.error.publicMessage, onDismiss)
         PresentationState.Idle -> Unit
     }
 }

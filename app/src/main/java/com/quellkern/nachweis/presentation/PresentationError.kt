@@ -136,8 +136,66 @@ sealed interface PresentationError {
         override val publicMessage = "This verifier's registration doesn't match its access certificate."
     }
 
-    /** Anything not classified above; cause retained for triage, never for display. */
-    data class Unexpected(val cause: Throwable) : PresentationError {
-        override val publicMessage = "This request could not be processed."
+    /**
+     * The verifier could not be reached while fetching the request or sending the response
+     * (no network, host unresolved, or a timeout). Distinct from a *refusal*: nothing about the
+     * request was wrong, the connection failed.
+     */
+    data object Network : PresentationError {
+        override val publicMessage = "Couldn't reach the verifier. Check your connection and try again."
     }
+
+    /**
+     * Device authentication for the credential's signing key was cancelled or failed during the
+     * send phase, so the response was never signed. The disclosure did not happen.
+     */
+    data object UserAuthDeclined : PresentationError {
+        override val publicMessage = "Sharing needs device authentication to unlock your credential's key."
+    }
+
+    /**
+     * Anything not classified above, surfaced from the *send* phase: the request was read,
+     * trusted, and consented to, but disclosure could not be completed. The copy is send-phase
+     * honest (nothing was shared) and the cause is retained for triage, never for display.
+     */
+    data class Unexpected(val cause: Throwable) : PresentationError {
+        override val publicMessage = "Your credential couldn't be shared. Please try again."
+    }
+
+    companion object {
+        /**
+         * Map a thrown cause to a typed error by exception type and a small set of stable
+         * keywords, never by echoing the message. Mirrors
+         * [com.quellkern.nachweis.issuance.IssuanceError.fromThrowable]: a network fault maps to
+         * [Network], a cancelled/failed device authentication to [UserAuthDeclined], and anything
+         * else falls through to [Unexpected]. The read/obtain phase substitutes [Unreadable] for
+         * that fallthrough itself (see [com.quellkern.nachweis.presentation.PresentationController]).
+         */
+        fun fromThrowable(t: Throwable): PresentationError {
+            val text = (t.message ?: "").lowercase()
+            return when {
+                t is java.net.UnknownHostException ||
+                    t is java.net.ConnectException ||
+                    t is java.net.SocketTimeoutException -> Network
+                t is com.quellkern.nachweis.issuance.UserAuthException -> UserAuthDeclined
+                "user not authenticated" in text || "authentication" in text -> UserAuthDeclined
+                else -> Unexpected(t)
+            }
+        }
+    }
+}
+
+/**
+ * The dialog title for a rejected/failed presentation, split by phase. A *refusal* (the request
+ * was read but declined on trust, registration, or query grounds) reads "Request rejected"; an
+ * *operational* failure in obtaining or sending (network, device authentication, or an unexpected
+ * send-phase fault) reads "Couldn't share", because nothing was wrong with the request — the
+ * share simply could not be completed.
+ */
+fun presentationFailureTitle(error: PresentationError): String = when (error) {
+    is PresentationError.Network,
+    is PresentationError.UserAuthDeclined,
+    is PresentationError.Unexpected,
+    -> "Couldn't share"
+    else -> "Request rejected"
 }

@@ -62,7 +62,14 @@ class PresentationController(
             } catch (t: Throwable) {
                 statusPrep.cancel()
                 pending = null
-                _state.value = PresentationState.Rejected(PresentationError.Unreadable)
+                // Obtain phase: a network fault is reported as such; any other failure means the
+                // request could not be read, so it falls through to Unreadable (never to the
+                // send-phase Unexpected).
+                val error = when (val mapped = PresentationError.fromThrowable(t)) {
+                    is PresentationError.Network -> mapped
+                    else -> PresentationError.Unreadable
+                }
+                _state.value = PresentationState.Rejected(error)
                 return@launch
             }
             when (val result = validator.validate(signed, clock())) {
@@ -109,7 +116,10 @@ class PresentationController(
                 _state.value = PresentationState.Sent
             } catch (t: Throwable) {
                 pending = null
-                _state.value = PresentationState.Rejected(PresentationError.Unexpected(t))
+                // Send phase: classify the failure so a network drop or a declined device
+                // authentication reads honestly, instead of collapsing every send failure onto
+                // the generic Unexpected.
+                _state.value = PresentationState.Rejected(PresentationError.fromThrowable(t))
             }
         }
     }
