@@ -24,6 +24,9 @@ interface DocumentStore {
      * display-only and never flow back into [DocumentSummary] or any log.
      */
     fun details(id: String): CredentialDetail?
+
+    /** Permanently remove the credential with [id]; true on success, false if the delete failed. */
+    fun delete(id: String): Boolean
 }
 
 /** Backs [DocumentStore] with a ready [EudiWallet]. */
@@ -51,6 +54,9 @@ class WalletDocumentStore(private val wallet: EudiWallet) : DocumentStore {
             claims = flattenClaims(nodes),
         )
     }
+
+    override fun delete(id: String): Boolean =
+        wallet.deleteDocumentById(id).isSuccess
 
     private fun formatLabel(format: DocumentFormat): String = when (format) {
         is SdJwtVcFormat -> format.vct

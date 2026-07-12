@@ -127,6 +127,11 @@ class MainActivity : FragmentActivity() {
             onPresentationDecline = { presentation.decline() },
             onPresentationDismiss = { presentation.reset() },
             loadDetail = { id -> store.details(id) },
+            onDelete = { id ->
+                val deleted = store.delete(id)
+                if (deleted) documents = store.list()
+                deleted
+            },
         )
     }
 

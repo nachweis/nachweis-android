@@ -7,15 +7,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.quellkern.nachweis.issuance.CredentialClaim
 import com.quellkern.nachweis.issuance.CredentialDetail
+import com.quellkern.nachweis.ui.components.DangerButton
 import com.quellkern.nachweis.ui.components.NeoSurface
 import com.quellkern.nachweis.ui.components.SecondaryButton
 import com.quellkern.nachweis.ui.theme.MonoTextStyle
@@ -28,13 +35,19 @@ import com.quellkern.nachweis.ui.theme.MonoTextStyle
  *
  * Each claim is a label-over-mono-value row inside the neo-brutal card surface; every row is a
  * single merged semantics node so TalkBack speaks "{path}: {value}" once.
+ *
+ * The destructive [onDelete] is gated behind a confirmation dialog: removal is irreversible, so it
+ * is never a single tap.
  */
 @Composable
 fun CredentialDetailScreen(
     detail: CredentialDetail,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onDelete: () -> Unit = {},
 ) {
+    var confirmingDelete by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -70,6 +83,33 @@ fun CredentialDetailScreen(
                 }
             }
         }
+
+        DangerButton(
+            label = "Delete credential",
+            onClick = { confirmingDelete = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 24.dp),
+        )
+    }
+
+    if (confirmingDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text("Delete this credential?") },
+            text = { Text("This cannot be undone. You would need to get it from the issuer again.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmingDelete = false
+                        onDelete()
+                    },
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 

@@ -58,6 +58,7 @@ fun WalletScreen(
     onPresentationDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     loadDetail: (String) -> CredentialDetail? = { null },
+    onDelete: (String) -> Boolean = { false },
 ) {
     Scaffold(modifier = modifier) { padding ->
         val content = Modifier.padding(padding)
@@ -68,6 +69,7 @@ fun WalletScreen(
                     onScanned = onScanned,
                     modifier = content,
                     loadDetail = loadDetail,
+                    onDelete = onDelete,
                 )
             else -> WalletStatus(walletState, modifier = content)
         }
@@ -102,6 +104,7 @@ internal fun WalletReadyContent(
     onScanned: (String) -> Unit,
     modifier: Modifier = Modifier,
     loadDetail: (String) -> CredentialDetail? = { null },
+    onDelete: (String) -> Boolean = { false },
     scanner: @Composable (onScanned: (String) -> Unit, onCancel: () -> Unit, modifier: Modifier) -> Unit =
         { onScan, onCancel, scanModifier ->
             ScanScreen(onScanned = onScan, onCancel = onCancel, modifier = scanModifier)
@@ -132,6 +135,9 @@ internal fun WalletReadyContent(
             detail = detail,
             onBack = { openDocumentId = null },
             modifier = modifier,
+            // On a successful delete the caller refreshes the list; close the detail so the (now
+            // shorter) list shows. On failure stay on the detail so the credential is still there.
+            onDelete = { if (onDelete(detail.id)) openDocumentId = null },
         )
         else -> DocumentListScreen(
             documents = documents,
