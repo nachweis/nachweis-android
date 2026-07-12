@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,6 +27,15 @@ import java.util.Date
  * The fix routes the arrival refresh through the controller's `prepareStatus` hook, which the
  * controller **awaits** (bounded, in the pre-consent Resolving phase) before registration
  * evaluation. These tests pin both the failure path and the fix, without any network.
+ *
+ * A test that is *literally red on the pre-fix code* is impossible in principle here. The fix did
+ * not change any existing branch; it added the `prepareStatus` seam and routed the arrival refresh
+ * through it. [PresentationController]'s `prepareStatus` defaults to a no-op, and with that default
+ * the fixed controller is byte-for-byte the old one (obtain → validate → evaluate against whatever
+ * is cached), so the same test compiled against the old sources would run the same code and pass.
+ * What these cases pin instead is the seam's *contract*: an awaited refresh closes the race (above);
+ * a refresh that *fails* still fails closed rather than crashing the flow; and a request rejected
+ * before the refresh lands cancels the pending wait without leaking a job.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RegistrationStatusRefreshRaceTest {
@@ -149,5 +159,67 @@ class RegistrationStatusRefreshRaceTest {
             RegistrationVerdict.InsideRegistration,
             (state as PresentationState.AwaitingConsent).request.registrationVerdict,
         )
+    }
+
+    /**
+     * The refresh itself failing (endpoint unreachable) must not crash the flow: the controller wraps
+     * `prepareStatus` in a `runCatching`, so a throwing refresh is swallowed, the cache stays empty
+     * (every lookup Unknown), and evaluation still fails closed with the exact user-facing reason —
+     * never an uncaught exception. This is the fail-closed half of the seam's contract.
+     */
+    @Test
+    fun `a failing arrival refresh still fails closed with the registration-status rejection`() = runTest {
+        val gateway = RecordingGateway(signedRequest())
+        val cache = SwappableWrprcStatusSource()
+        val c = controller(this, gateway, wrprcStatus = cache) {
+            // Model the out-of-band refresh failing: it neither publishes a status list nor returns
+            // cleanly. The controller's runCatching must absorb this without leaving the flow.
+            throw java.io.IOException("status endpoint unreachable")
+        }
+        c.onRequest("openid4vp://r"); advanceUntilIdle()
+
+        val state = c.state.value
+        assertTrue("expected Rejected but was $state", state is PresentationState.Rejected)
+        assertEquals(PresentationError.RegistrationStatusUnavailable, (state as PresentationState.Rejected).error)
+        // No disclosure was attempted, and the single arrival fetch is all that ran.
+        assertEquals(1, gateway.obtainCalls)
+        assertEquals(0, gateway.sendCalls)
+    }
+
+    /**
+     * A request that fails access-layer validation is rejected *before* the arrival refresh lands.
+     * The controller cancels the still-in-flight `prepareStatus` wait, so no refresh job outlives the
+     * rejected request. `runTest` completing without hanging is the assertion that no job leaked: had
+     * the cancel not fired, the never-completing `prepareStatus` below would keep the test scope
+     * active and `runTest` would fail.
+     */
+    @Test
+    fun `an invalid request cancels the in-flight status wait and leaks no jobs`() = runTest {
+        // A gateway whose obtain suspends once (yield) so the concurrently-launched status wait is
+        // actually running by the time validation rejects — mirroring the real flow, where the
+        // request fetch does network I/O while the refresh is in flight.
+        var sendCalls = 0
+        val gateway = object : Oid4vpGateway {
+            override suspend fun obtainSignedRequest(requestUri: String): SignedPresentationRequest {
+                yield()
+                return SignedPresentationRequest(PresentationFixtures.corruptSignature(signedRequest()))
+            }
+            override suspend fun sendResponse(request: ValidatedPresentationRequest, disclosedClaims: List<RequestedClaim>) { sendCalls++ }
+            override fun reject() {}
+        }
+        val cache = SwappableWrprcStatusSource()
+        val neverCompletes = CompletableDeferred<Unit>()
+        var prepareStarted = false
+        val c = controller(this, gateway, wrprcStatus = cache) {
+            prepareStarted = true
+            neverCompletes.await() // an arrival refresh still in flight; the reject must cancel it
+        }
+        c.onRequest("openid4vp://r"); advanceUntilIdle()
+
+        val state = c.state.value
+        assertTrue("expected Rejected but was $state", state is PresentationState.Rejected)
+        assertTrue("prepareStatus should have started before the request was rejected", prepareStarted)
+        // The rejected request never reaches disclosure.
+        assertEquals(0, sendCalls)
     }
 }
