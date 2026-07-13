@@ -17,6 +17,17 @@ Verified end-to-end against a deployed sandbox (issuer, verifier, and trust/stat
   **"outside this verifier's registration"** (never "over-ask"). Consent evaluation makes zero
   network calls.
 
+## Screenshots
+
+All data shown is the standard German test persona (Erika Mustermann), issued by the public
+sandbox issuer. The two consent dialogs are the same wallet talking to the same verifier: the
+root endpoint over-asks (`given_name`, `family_name` are outside its registration certificate),
+the `/age/` endpoint asks only for `age_equal_or_over.18` and passes.
+
+| Credential list | Consent: outside registration | Consent: within registration | Credential detail |
+|---|---|---|---|
+| ![Credential list](docs/screenshots/credential-list.png) | ![Negative verdict](docs/screenshots/consent-negative-verdict.png) | ![Positive verdict](docs/screenshots/consent-positive-verdict.png) | ![Credential detail](docs/screenshots/credential-detail.png) |
+
 ## Toolchain
 
 minSdk 26, JDK 17, AGP 9.2.1 (built-in Kotlin toolchain), `eudi-lib-android-wallet-core` 0.28.1.

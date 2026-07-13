@@ -25,3 +25,4 @@ wiki/
 exports/
 CLAUDE.md
 llm-wiki.md
+*.pem
