@@ -45,8 +45,9 @@ fix is upstream PR
 
 `main` intentionally stays on the official release rather than shipping a fork. For live issuance
 demonstrations, the upstream fix (PR #369) is applied to a local checkout of the official `v0.28.1`
-and consumed through a local Maven repository; that patched build is never committed or published.
-`main` will resume tracking an official release once the fix ships. Details:
+and consumed through a local Maven repository; `main` never consumes the patched artifact (a
+vendored variant was proposed in [PR #1](https://github.com/nachweis/nachweis-android/pull/1) and
+closed unmerged). `main` will resume tracking an official release once the fix ships. Details:
 [`docs/interop-walletcore.md`](docs/interop-walletcore.md).
 
 ## Notes

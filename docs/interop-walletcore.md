@@ -39,8 +39,10 @@ convenience. Instead:
 - `main` documents the issue (here + in the README) and links the upstream PR.
 - For live demonstrations, the fix (PR #369) is applied to a local checkout of the official
   `v0.28.1`, built, and consumed through a local Maven repository. This patched build issues a real
-  SD-JWT PID (`urn:eudi:pid:de:1`) end-to-end against the deployed sandbox. It stays on the developer
-  machine and is never committed, published, or pushed.
+  SD-JWT PID (`urn:eudi:pid:de:1`) end-to-end against the deployed sandbox. `main` never consumes
+  the patched artifact; a vendored variant was proposed in
+  [PR #1](https://github.com/nachweis/nachweis-android/pull/1) and closed unmerged to keep official
+  provenance on `main`.
 
 ## When upstream releases the fix
 
